@@ -179,11 +179,11 @@ echo "  ✓ Version: $NEW_VER"
 echo "[2/5] Building frontend (npm ci or install + npm run build)..."
 cd "$ROOT/frontend"
 if [[ -f package-lock.json ]]; then
-  npm ci --silent || exit 1
+  npm ci || exit 1
 else
-  npm install --silent || exit 1
+  npm install || exit 1
 fi
-npm run build --silent || exit 1
+npm run build || exit 1
 cd "$ROOT"
 echo "  ✓ Frontend built to static/"
 
