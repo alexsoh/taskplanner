@@ -152,16 +152,16 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 
 echo "[1/5] Building frontend (npm ci or install + npm run build)..."
-chmod -R u+w "$ROOT" 2>/dev/null || true
-rm -rf ~/.npm 2>/dev/null || true
+NPM_CACHE="$(mktemp -d)"
 cd "$ROOT/frontend"
 if [[ -f package-lock.json ]]; then
-  npm ci
+  npm ci --cache "$NPM_CACHE"
 else
-  npm install
+  npm install --cache "$NPM_CACHE"
 fi
 npm run build
 cd "$ROOT"
+rm -rf "$NPM_CACHE"
 echo "  Frontend built to static/"
 
 echo "[2/5] Writing version.txt..."
