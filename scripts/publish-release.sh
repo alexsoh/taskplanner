@@ -100,11 +100,15 @@ new_v = f"{maj}.{min_}.{pat}"
 new_text = text[: m.start()] + prefix + new_v + suffix + text[m.end() :]
 if not dry:
     path.write_text(new_text, encoding="utf-8")
+    sys.stderr.write(f"Updated tp/__init__.py: {new_v}\n")
+else:
+    sys.stderr.write(f"DRY RUN: would update to {new_v}\n")
 print(new_v)
 PY
 )"
 
 TAG="v${NEW_VER}"
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 SUMMARY_PATH="$ROOT/summary.txt"
 DEFAULT_SUMMARY_LINE="new version release"
 
@@ -130,12 +134,6 @@ PY
   rm -f "$tmp"
 }
 
-if [[ "$DRY_RUN" -eq 1 ]]; then
-  BRANCH="(dry-run)"
-else
-  BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-fi
-
 echo "=== ${PRODUCT} publish ${TAG} (${BUMP_KIND} bump on ${BRANCH}) ==="
 echo ""
 
@@ -153,12 +151,14 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   exit 0
 fi
 
-echo "[1/5] Building frontend (npm install + npm run build)..."
+echo "[1/5] Building frontend (npm ci or install + npm run build)..."
 cd "$ROOT/frontend"
-if [ ! -d "node_modules" ]; then
-  $NPM install
+if [[ -f package-lock.json ]]; then
+  npm ci --silent
+else
+  npm install --silent
 fi
-$NPM run build
+npm run build --silent
 cd "$ROOT"
 echo "  Frontend built to static/"
 
