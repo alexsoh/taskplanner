@@ -32,7 +32,7 @@ jobs:
         run: |
           for ($i = 1; $i -le 3; $i++) {
             $ErrorActionPreference = 'Continue'
-            bash build_release.sh
+            powershell -File build_release.ps1
             $ec = $LASTEXITCODE
             $ErrorActionPreference = 'Stop'
             if ($ec -eq 0) { exit 0 }
