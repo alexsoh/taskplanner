@@ -97,6 +97,7 @@ if not m:
     sys.stderr.write("Could not parse __version__ in tp/__init__.py\n")
     sys.exit(1)
 prefix, maj, min_, pat, suffix = m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4)), m.group(5)
+current_v = f"{maj}.{min_}.{pat}"
 if kind == "patch":
     pat += 1
 elif kind == "minor":
@@ -112,6 +113,9 @@ new_v = f"{maj}.{min_}.{pat}"
 new_text = text[: m.start()] + prefix + new_v + suffix + text[m.end() :]
 if not dry:
     path.write_text(new_text, encoding="utf-8")
+    sys.stderr.write(f"✓ Version bumped: {current_v} → {new_v}\n")
+else:
+    sys.stderr.write(f"  Would bump: {current_v} → {new_v}\n")
 print(new_v)
 PY
 )"
@@ -168,7 +172,10 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   exit 0
 fi
 
-echo "[1/5] Building frontend (npm ci or install + npm run build)..."
+echo "[1/5] Bumping version (${BUMP_KIND})..."
+echo "$NEW_VER" >"$ROOT/version.txt"
+
+echo "[2/5] Building frontend (npm ci or install + npm run build)..."
 cd "$ROOT/frontend"
 if [[ -f package-lock.json ]]; then
   npm ci --silent
@@ -177,16 +184,17 @@ else
 fi
 npm run build --silent
 cd "$ROOT"
-echo "  Frontend built to static/"
+echo "  ✓ Frontend built to static/"
 
-echo "[2/5] Writing version.txt..."
+echo "[3/5] Writing version.txt..."
 echo "$NEW_VER" >"$ROOT/version.txt"
+echo "  ✓ version.txt = $NEW_VER"
 
-echo "[3/5] Updating summary.txt (trimmed; empty -> \"${DEFAULT_SUMMARY_LINE}\")."
-
+echo "[4/5] Updating summary.txt (trimmed; empty -> \"${DEFAULT_SUMMARY_LINE}\")."
 write_summary
+echo "  ✓ summary.txt updated"
 
-echo "[4/5] Commit and tag..."
+echo "[5/5] Commit and tag..."
 git add -A
 if git diff --staged --quiet; then
   echo "ERROR: nothing staged to commit (unexpected)." >&2
@@ -199,18 +207,34 @@ $(cat "$SUMMARY_PATH")
 EOF
 git tag "$TAG"
 
-echo "[5/5] Push and GitHub release..."
+echo "[5/5] Commit and tag..."
+git add -A
+if git diff --staged --quiet; then
+  echo "ERROR: nothing staged to commit (unexpected)." >&2
+  exit 1
+fi
+git commit -F - <<EOF
+release: ${TAG}
+
+$(cat "$SUMMARY_PATH")
+EOF
+git tag "$TAG"
+echo "  ✓ Committed and tagged ${TAG}"
+
+echo "[6/6] Push and GitHub release..."
 git push origin "$BRANCH" --tags
+echo "  ✓ Pushed to origin/${BRANCH}"
 if [[ "$NO_GH" -eq 0 ]]; then
   gh release create "$TAG" --title "${PRODUCT} ${TAG}" --generate-notes
+  echo "  ✓ GitHub release created"
 else
-  echo "  Skipped gh (--no-gh). Create release manually:"
+  echo "  ⊘ Skipped gh (--no-gh). Create release manually:"
   echo "    gh release create ${TAG} --title \"${PRODUCT} ${TAG}\" --generate-notes"
 fi
 
 if [[ "$BUILD" -eq 1 ]]; then
   echo ""
-  echo "[6/6] Building Nuitka binaries..."
+  echo "[7/7] Building Nuitka binaries..."
   bash "$ROOT/build_release.sh"
 fi
 
