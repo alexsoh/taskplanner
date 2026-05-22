@@ -9,12 +9,7 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v6
@@ -35,16 +30,34 @@ jobs:
 
       - name: Build release
         run: |
-          for i in 1 2 3; do
-            bash build_release.sh && break
-            [ $i -lt 3 ] && echo "Attempt $i failed, retrying in 15s..." && sleep 15
-          done
+          for ($i = 1; $i -le 3; $i++) {
+            $ErrorActionPreference = 'Continue'
+            bash build_release.sh
+            $ec = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+            if ($ec -eq 0) { exit 0 }
+            if ($i -lt 3) {
+              Write-Host "Attempt $i failed (exit $ec), retrying in 15s..."
+              Start-Sleep 15
+            }
+          }
+          exit 1
+        shell: pwsh
 
       - name: Upload release asset
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: pwsh
         run: |
-          for i in 1 2 3; do
-            gh release upload "${{ github.event.release.tag_name }}" release/*.zip --clobber && break
-            [ $i -lt 3 ] && echo "Attempt $i failed, retrying in 15s..." && sleep 15
-          done
+          for ($i = 1; $i -le 3; $i++) {
+            $ErrorActionPreference = 'Continue'
+            gh release upload "${{ github.event.release.tag_name }}" release/*.zip --clobber
+            $ec = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+            if ($ec -eq 0) { exit 0 }
+            if ($i -lt 3) {
+              Write-Host "Attempt $i failed, retrying in 15s..."
+              Start-Sleep 15
+            }
+          }
+          exit 1
