@@ -174,27 +174,24 @@ fi
 
 echo "[1/5] Bumping version (${BUMP_KIND})..."
 echo "$NEW_VER" >"$ROOT/version.txt"
+echo "  ✓ Version: $NEW_VER"
 
 echo "[2/5] Building frontend (npm ci or install + npm run build)..."
 cd "$ROOT/frontend"
 if [[ -f package-lock.json ]]; then
-  npm ci --silent
+  npm ci --silent || exit 1
 else
-  npm install --silent
+  npm install --silent || exit 1
 fi
-npm run build --silent
+npm run build --silent || exit 1
 cd "$ROOT"
 echo "  ✓ Frontend built to static/"
 
-echo "[3/5] Writing version.txt..."
-echo "$NEW_VER" >"$ROOT/version.txt"
-echo "  ✓ version.txt = $NEW_VER"
-
-echo "[4/5] Updating summary.txt (trimmed; empty -> \"${DEFAULT_SUMMARY_LINE}\")."
+echo "[3/5] Updating summary.txt (trimmed; empty -> \"${DEFAULT_SUMMARY_LINE}\")."
 write_summary
 echo "  ✓ summary.txt updated"
 
-echo "[5/5] Commit and tag..."
+echo "[4/5] Commit and tag..."
 git add -A
 if git diff --staged --quiet; then
   echo "ERROR: nothing staged to commit (unexpected)." >&2
@@ -207,7 +204,7 @@ $(cat "$SUMMARY_PATH")
 EOF
 git tag "$TAG"
 
-echo "[5/5] Commit and tag..."
+echo "[4/5] Commit and tag..."
 git add -A
 if git diff --staged --quiet; then
   echo "ERROR: nothing staged to commit (unexpected)." >&2
@@ -221,7 +218,7 @@ EOF
 git tag "$TAG"
 echo "  ✓ Committed and tagged ${TAG}"
 
-echo "[6/6] Push and GitHub release..."
+echo "[5/5] Push and GitHub release..."
 git push origin "$BRANCH" --tags
 echo "  ✓ Pushed to origin/${BRANCH}"
 if [[ "$NO_GH" -eq 0 ]]; then
@@ -234,7 +231,7 @@ fi
 
 if [[ "$BUILD" -eq 1 ]]; then
   echo ""
-  echo "[7/7] Building Nuitka binaries..."
+  echo "[6/6] Building Nuitka binaries..."
   bash "$ROOT/build_release.sh"
 fi
 
