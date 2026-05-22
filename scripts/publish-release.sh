@@ -1,26 +1,16 @@
 #!/usr/bin/env bash
 # TaskPlanner release workflow: bump semver in tp/__init__.py, build frontend to static/,
-# refresh version.txt, overwrite summary.txt, commit (body = summary), tag, push, GitHub release,
-# and optionally build compiled binaries with Nuitka.
+# refresh version.txt, overwrite summary.txt, commit (body = summary), tag, push, GitHub release.
 #
 # Usage:
-#   ./scripts/publish-release.sh [--patch|--minor|--major] [--dry-run] [--no-gh] [--build] \
+#   ./scripts/publish-release.sh [--patch|--minor|--major] [--dry-run] [--no-gh] \
 #     [-m "release notes"] [--summary-file PATH]
 #
 # Omitting both -m and --summary-file uses summary: new version release
 # summary.txt is overwritten (current release only). With -m or --summary-file, body is trimmed;
 # if empty / whitespace-only after trim, it defaults to the single line: new version release
 #
-# Options:
-#   --patch, --minor, --major   Bump version (default: patch)
-#   --dry-run                   Show what would be done without making changes
-#   --no-gh                     Skip GitHub release (create tag/push only)
-#   --build                     Build compiled binaries with Nuitka locally (not recommended)
-#   -m "message"                Custom release notes
-#   --summary-file PATH         File containing release notes
-#
 # Requires: git, npm, gh (unless --no-gh or --dry-run). Does not run pytest — run tests first if needed.
-# With --build: requires Python 3.11, C compiler, and Nuitka.
 set -euo pipefail
 
 PRODUCT="TaskPlanner"
@@ -28,14 +18,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 usage() {
-  sed -n '1,26p' "$0" | tail -n +2
+  sed -n '1,18p' "$0" | tail -n +2
   exit 1
 }
 
 BUMP_KIND="patch"
 DRY_RUN=0
 NO_GH=0
-BUILD=0
 SUMMARY_MSG=""
 SUMMARY_FILE=""
 
@@ -61,7 +50,6 @@ while [[ $# -gt 0 ]]; do
     --major) BUMP_KIND="major"; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --no-gh) NO_GH=1; shift ;;
-    --build) BUILD=1; shift ;;
     -h|--help) usage ;;
     *)
       echo "ERROR: unknown option: $1" >&2
@@ -114,8 +102,6 @@ new_text = text[: m.start()] + prefix + new_v + suffix + text[m.end() :]
 if not dry:
     path.write_text(new_text, encoding="utf-8")
     sys.stderr.write(f"✓ Version bumped: {current_v} → {new_v}\n")
-else:
-    sys.stderr.write(f"  Would bump: {current_v} → {new_v}\n")
 print(new_v)
 PY
 )"
@@ -157,9 +143,6 @@ echo ""
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] Would bump to ${NEW_VER}, build frontend, write version.txt, update summary.txt, commit, tag, push, gh release."
-  if [[ "$BUILD" -eq 1 ]]; then
-    echo "[dry-run] Would also build Nuitka binaries (not recommended locally; use GitHub Actions instead)."
-  fi
   if [[ -n "$SUMMARY_FILE" ]]; then
     echo "[dry-run] Summary source: --summary-file $SUMMARY_FILE"
   elif [[ -n "$SUMMARY_MSG" ]]; then
@@ -172,24 +155,24 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   exit 0
 fi
 
-echo "[1/5] Bumping version (${BUMP_KIND})..."
-echo "$NEW_VER" >"$ROOT/version.txt"
-echo "  ✓ Version: $NEW_VER"
-
-echo "[2/5] Building frontend (npm ci or install + npm run build)..."
+echo "[1/5] Building frontend..."
 cd "$ROOT/frontend"
 if [[ -f package-lock.json ]]; then
-  npm ci || exit 1
+  npm ci
 else
-  npm install || exit 1
+  npm install
 fi
-npm run build || exit 1
+npm run build
 cd "$ROOT"
-echo "  ✓ Frontend built to static/"
+echo "✓ Frontend built"
 
-echo "[3/5] Updating summary.txt (trimmed; empty -> \"${DEFAULT_SUMMARY_LINE}\")."
+echo "[2/5] Writing version.txt..."
+echo "$NEW_VER" >"$ROOT/version.txt"
+echo "✓ version.txt = $NEW_VER"
+
+echo "[3/5] Updating summary.txt..."
 write_summary
-echo "  ✓ summary.txt updated"
+echo "✓ summary.txt updated"
 
 echo "[4/5] Commit and tag..."
 git add -A
@@ -197,42 +180,21 @@ if git diff --staged --quiet; then
   echo "ERROR: nothing staged to commit (unexpected)." >&2
   exit 1
 fi
-git commit -F - <<EOF
-release: ${TAG}
+git commit -m "release: ${TAG}
 
-$(cat "$SUMMARY_PATH")
-EOF
+$(cat "$SUMMARY_PATH")"
 git tag "$TAG"
-
-echo "[4/5] Commit and tag..."
-git add -A
-if git diff --staged --quiet; then
-  echo "ERROR: nothing staged to commit (unexpected)." >&2
-  exit 1
-fi
-git commit -F - <<EOF
-release: ${TAG}
-
-$(cat "$SUMMARY_PATH")
-EOF
-git tag "$TAG"
-echo "  ✓ Committed and tagged ${TAG}"
+echo "✓ Committed and tagged ${TAG}"
 
 echo "[5/5] Push and GitHub release..."
 git push origin "$BRANCH" --tags
-echo "  ✓ Pushed to origin/${BRANCH}"
+echo "✓ Pushed to origin/${BRANCH}"
+
 if [[ "$NO_GH" -eq 0 ]]; then
   gh release create "$TAG" --title "${PRODUCT} ${TAG}" --generate-notes
-  echo "  ✓ GitHub release created"
+  echo "✓ GitHub release created"
 else
-  echo "  ⊘ Skipped gh (--no-gh). Create release manually:"
-  echo "    gh release create ${TAG} --title \"${PRODUCT} ${TAG}\" --generate-notes"
-fi
-
-if [[ "$BUILD" -eq 1 ]]; then
-  echo ""
-  echo "[6/6] Building Nuitka binaries..."
-  bash "$ROOT/build_release.sh"
+  echo "⊘ Skipped gh (--no-gh)"
 fi
 
 echo ""
