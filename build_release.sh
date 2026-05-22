@@ -10,21 +10,14 @@
 #
 # Usage:
 #   ./build_release.sh                    # build for current version
-#   ./build_release.sh --upload           # upload to GitHub release
+#
+# Note: This is called by scripts/publish-release.sh --build or by GitHub Actions.
+# GitHub Actions automatically uploads to the release.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
-
-# ---------- parse arguments ----------
-UPLOAD=0
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --upload) UPLOAD=1; shift ;;
-        *)      echo "Unknown option: $1"; exit 1 ;;
-    esac
-done
 
 # ---------- detect platform ----------
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -105,14 +98,6 @@ echo "    [OK] release/${RELEASE_NAME}.zip ($ZIP_SIZE)"
 # ---------- cleanup nuitka build artifacts ----------
 rm -rf tp.build/
 rm -f tp.cpython-*.so
-
-if [[ $UPLOAD -eq 1 ]]; then
-    echo ""
-    echo "==> Uploading to GitHub release..."
-    TAG="v${VERSION}"
-    gh release upload "$TAG" "release/${RELEASE_NAME}.zip" --clobber
-    echo "    [OK] Uploaded to https://github.com/alexsoh/taskplanner/releases/tag/$TAG"
-fi
 
 echo ""
 echo "========================================="

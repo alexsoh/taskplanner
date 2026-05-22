@@ -1,16 +1,26 @@
 #!/usr/bin/env bash
 # TaskPlanner release workflow: bump semver in tp/__init__.py, build frontend to static/,
-# refresh version.txt, overwrite summary.txt, commit (body = summary), tag, push, GitHub release.
+# refresh version.txt, overwrite summary.txt, commit (body = summary), tag, push, GitHub release,
+# and optionally build compiled binaries with Nuitka.
 #
 # Usage:
-#   ./scripts/publish-release.sh [--patch|--minor|--major] [--dry-run] [--no-gh] \
+#   ./scripts/publish-release.sh [--patch|--minor|--major] [--dry-run] [--no-gh] [--build] \
 #     [-m "release notes"] [--summary-file PATH]
 #
 # Omitting both -m and --summary-file uses summary: new version release
 # summary.txt is overwritten (current release only). With -m or --summary-file, body is trimmed;
 # if empty / whitespace-only after trim, it defaults to the single line: new version release
 #
+# Options:
+#   --patch, --minor, --major   Bump version (default: patch)
+#   --dry-run                   Show what would be done without making changes
+#   --no-gh                     Skip GitHub release (create tag/push only)
+#   --build                     Build compiled binaries with Nuitka locally (not recommended)
+#   -m "message"                Custom release notes
+#   --summary-file PATH         File containing release notes
+#
 # Requires: git, npm, gh (unless --no-gh or --dry-run). Does not run pytest — run tests first if needed.
+# With --build: requires Python 3.11, C compiler, and Nuitka.
 set -euo pipefail
 
 PRODUCT="TaskPlanner"
@@ -18,13 +28,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 usage() {
-  sed -n '1,18p' "$0" | tail -n +2
+  sed -n '1,26p' "$0" | tail -n +2
   exit 1
 }
 
 BUMP_KIND="patch"
 DRY_RUN=0
 NO_GH=0
+BUILD=0
 SUMMARY_MSG=""
 SUMMARY_FILE=""
 
@@ -50,6 +61,7 @@ while [[ $# -gt 0 ]]; do
     --major) BUMP_KIND="major"; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --no-gh) NO_GH=1; shift ;;
+    --build) BUILD=1; shift ;;
     -h|--help) usage ;;
     *)
       echo "ERROR: unknown option: $1" >&2
@@ -141,6 +153,9 @@ echo ""
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] Would bump to ${NEW_VER}, build frontend, write version.txt, update summary.txt, commit, tag, push, gh release."
+  if [[ "$BUILD" -eq 1 ]]; then
+    echo "[dry-run] Would also build Nuitka binaries (not recommended locally; use GitHub Actions instead)."
+  fi
   if [[ -n "$SUMMARY_FILE" ]]; then
     echo "[dry-run] Summary source: --summary-file $SUMMARY_FILE"
   elif [[ -n "$SUMMARY_MSG" ]]; then
@@ -191,6 +206,12 @@ if [[ "$NO_GH" -eq 0 ]]; then
 else
   echo "  Skipped gh (--no-gh). Create release manually:"
   echo "    gh release create ${TAG} --title \"${PRODUCT} ${TAG}\" --generate-notes"
+fi
+
+if [[ "$BUILD" -eq 1 ]]; then
+  echo ""
+  echo "[6/6] Building Nuitka binaries..."
+  bash "$ROOT/build_release.sh"
 fi
 
 echo ""
