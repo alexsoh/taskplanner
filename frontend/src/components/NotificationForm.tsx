@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useState } from 'react';
+import * as api from '../api/client.ts';
 import type { NotificationChannel } from '../types.ts';
 
 type Props = {
@@ -32,9 +33,6 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
   if (channel === 'mqtt') {
     return (
       <div className="space-y-3">
-        <Field label="Name">
-          <input className={inputCls} value={String(config.name ?? '')} onChange={(e) => set('name', e.target.value)} />
-        </Field>
         <Field label="Topic">
           <input className={inputCls} value={String(config.topic ?? '')} onChange={(e) => set('topic', e.target.value)} />
         </Field>
@@ -62,9 +60,6 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
   if (channel === 'telegram') {
     return (
       <div className="space-y-3">
-        <Field label="Name">
-          <input className={inputCls} value={String(config.name ?? '')} onChange={(e) => set('name', e.target.value)} />
-        </Field>
         <Field label="Chat ID">
           <input className={inputCls} value={String(config.chatId ?? '')} onChange={(e) => set('chatId', e.target.value)} />
         </Field>
@@ -85,9 +80,6 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
   if (channel === 'http') {
     return (
       <div className="space-y-3">
-        <Field label="Name">
-          <input className={inputCls} value={String(config.name ?? '')} onChange={(e) => set('name', e.target.value)} />
-        </Field>
         <Field label="URL">
           <input className={inputCls} value={String(config.url ?? '')} onChange={(e) => set('url', e.target.value)} />
         </Field>
@@ -116,9 +108,6 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
   if (channel === 'script') {
     return (
       <div className="space-y-3">
-        <Field label="Name">
-          <input className={inputCls} value={String(config.name ?? '')} onChange={(e) => set('name', e.target.value)} />
-        </Field>
         <Field label="Script path">
           <input className={inputCls} value={String(config.scriptPath ?? '')} onChange={(e) => set('scriptPath', e.target.value)} />
         </Field>
@@ -164,8 +153,7 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
       setDiscoveryError(null);
 
       try {
-        const { discoverCameras } = await import('../api/client.ts');
-        const result = await discoverCameras(app, serverAddress);
+        const result = await api.discoverCameras(app, serverAddress);
         setDiscoveredCameras(result.cameras);
         if (result.cameras.length === 0) {
           setDiscoveryError('No cameras found');
@@ -182,51 +170,52 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
 
     return (
       <div className="space-y-3">
-        <Field label="Name">
-          <input className={inputCls} value={String(config.name ?? '')} onChange={(e) => set('name', e.target.value)} />
-        </Field>
-        <Field label="App">
-          <select
-            className={inputCls}
-            value={String(config.app ?? 'vizmux')}
-            onChange={(e) => {
-              set('app', e.target.value);
-              setDiscoveredCameras([]);
-              setDiscoveryError(null);
-            }}
-          >
-            <option value="vizmux">VizMux</option>
-            <option value="piyoai">PiyoAI</option>
-            <option value="vizrec">VizRec</option>
-          </select>
-        </Field>
-        <Field label="Server Address">
-          <input
-            className={inputCls}
-            placeholder="http://localhost:8000"
-            value={String(config.serverAddress ?? '')}
-            onChange={(e) => {
-              set('serverAddress', e.target.value);
-              setDiscoveredCameras([]);
-              setDiscoveryError(null);
-            }}
-          />
-          <p className="text-xs text-text-muted mt-1">e.g., http://192.168.1.100:8000 or https://example.com:9000</p>
-        </Field>
-        <Field label="Cameras">
-          <button
-            type="button"
-            disabled={discovering || !String(config.serverAddress ?? '').trim()}
-            onClick={handleDiscover}
-            className="w-full px-3 py-1.5 bg-bg-secondary border border-border rounded text-sm font-medium hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {discovering ? 'Discovering...' : 'Discover Cameras'}
-          </button>
-          {discoveryError && <p className="text-xs text-text-error mt-1">{discoveryError}</p>}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="App">
+            <select
+              className={inputCls}
+              value={String(config.app ?? 'vizmux')}
+              onChange={(e) => {
+                set('app', e.target.value);
+                setDiscoveredCameras([]);
+                setDiscoveryError(null);
+              }}
+            >
+              <option value="vizmux">VizMux</option>
+              <option value="piyoai">PiyoAI</option>
+              <option value="vizrec">VizRec</option>
+            </select>
+          </Field>
+          <Field label="Server Address">
+            <input
+              className={inputCls}
+              placeholder="http://localhost:8000"
+              value={String(config.serverAddress ?? '')}
+              onChange={(e) => {
+                set('serverAddress', e.target.value);
+                setDiscoveredCameras([]);
+                setDiscoveryError(null);
+              }}
+            />
+          </Field>
+        </div>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-text-muted">Cameras</span>
+            <button
+              type="button"
+              disabled={discovering || !String(config.serverAddress ?? '').trim()}
+              onClick={handleDiscover}
+              className="text-xs px-2 py-0.5 bg-bg-secondary border border-border rounded hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {discovering ? 'Discovering...' : 'Discover'}
+            </button>
+          </div>
+          {discoveryError && <p className="text-xs text-text-error">{discoveryError}</p>}
           {discoveredCameras.length > 0 && (
             <select
               multiple
-              className={inputCls + ' mt-2 min-h-24'}
+              className={inputCls + ' min-h-24'}
               value={Array.isArray(config.cameraIds) ? config.cameraIds : []}
               onChange={(e) => set('cameraIds', Array.from(e.currentTarget.selectedOptions, (o) => o.value))}
             >
@@ -237,7 +226,7 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
               ))}
             </select>
           )}
-        </Field>
+        </div>
         <Field label="Action">
           <div className="space-y-2">
             <label className="flex items-center space-x-2 cursor-pointer">
@@ -271,9 +260,6 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
   // nvr
   return (
     <div className="space-y-3">
-      <Field label="Name">
-        <input className={inputCls} value={String(config.name ?? '')} onChange={(e) => set('name', e.target.value)} />
-      </Field>
       <Field label="Brand">
         <select className={inputCls} value={String(config.brand ?? 'reolink')} onChange={(e) => set('brand', e.target.value)}>
           <option value="reolink">reolink</option>
