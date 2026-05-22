@@ -152,6 +152,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 
 echo "[1/5] Building frontend (npm ci or install + npm run build)..."
+chmod -R u+w "$ROOT" 2>/dev/null || true
 rm -rf ~/.npm 2>/dev/null || true
 cd "$ROOT/frontend"
 if [[ -f package-lock.json ]]; then
@@ -164,6 +165,7 @@ cd "$ROOT"
 echo "  Frontend built to static/"
 
 echo "[2/5] Writing version.txt..."
+chmod u+w "$ROOT/tp/__init__.py" "$ROOT/version.txt" "$ROOT/summary.txt" 2>/dev/null || true
 echo "$NEW_VER" >"$ROOT/version.txt"
 
 echo "[3/5] Updating summary.txt (trimmed; empty -> \"${DEFAULT_SUMMARY_LINE}\")."
