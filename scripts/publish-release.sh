@@ -156,6 +156,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 
 echo "[1/5] Building frontend..."
+npm cache clean --force 2>/dev/null || true
 cd "$ROOT/frontend"
 if [[ -f package-lock.json ]]; then
   npm ci
