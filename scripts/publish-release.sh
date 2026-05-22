@@ -154,11 +154,11 @@ fi
 echo "[1/5] Building frontend (npm ci or install + npm run build)..."
 cd "$ROOT/frontend"
 if [[ -f package-lock.json ]]; then
-  npm ci --silent
+  npm ci
 else
-  npm install --silent
+  npm install
 fi
-npm run build --silent
+npm run build
 cd "$ROOT"
 echo "  Frontend built to static/"
 
