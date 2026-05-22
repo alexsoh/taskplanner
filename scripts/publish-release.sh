@@ -153,14 +153,12 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   exit 0
 fi
 
-echo "[1/5] Building frontend (npm ci or install + npm run build)..."
+echo "[1/5] Building frontend (npm install + npm run build)..."
 cd "$ROOT/frontend"
-if [[ -f package-lock.json ]]; then
-  npm ci --silent
-else
-  npm install --silent
+if [ ! -d "node_modules" ]; then
+  $NPM install
 fi
-npm run build --silent
+$NPM run build
 cd "$ROOT"
 echo "  Frontend built to static/"
 
