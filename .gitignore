@@ -1,0 +1,17 @@
+.venv/
+venv/
+python/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/*.db
+static/
+frontend/node_modules/
+frontend/dist/
+backups/
+logs/
+.req_hash
+taskplanner_upgrade_tmp/
+taskplanner_update.zip
+python-embed.zip
+get-pip.py
