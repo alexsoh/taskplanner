@@ -108,7 +108,7 @@ try {
     $healthCheckPassed = $false
     for ($i = 0; $i -lt $maxRetry; $i++) {
         try {
-            $response = Invoke-WebRequest -Uri "http://localhost:8200/api/health" -ErrorAction SilentlyContinue
+            $response = Invoke-WebRequest -Uri "http://localhost:8200/api/health" -UseBasicParsing -ErrorAction SilentlyContinue
             if ($response.StatusCode -eq 200) {
                 Write-Ok "Application is responding"
                 $healthCheckPassed = $true
