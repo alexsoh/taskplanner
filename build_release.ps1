@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Build a compiled release of TaskPlanner for Windows.
+    Build a compiled release of TaskPlanner for Windows (only).
     Compiles tp/ into a native .pyd via Nuitka, builds the frontend,
     and assembles a distributable zip with no source code.
 
@@ -12,6 +12,9 @@
 
 .EXAMPLE
     .\build_release.ps1
+
+.NOTE
+    This is the only supported build script. For Windows builds only.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -81,7 +84,7 @@ Copy-Item -Recurse "static" (Join-Path $releaseDir "static")
 Copy-Item "requirements.txt" $releaseDir\
 
 $scriptFiles = @(
-    "serve.sh", "serve.ps1", "upgrade.sh", "upgrade.ps1", "upgrade_run.sh", "upgrade_run.ps1", "setup.sh", "setup.ps1", "README.md"
+    "serve.sh", "serve.ps1", "upgrade.sh", "upgrade_run.sh", "setup.sh", "setup.ps1", "README.md"
 )
 foreach ($f in $scriptFiles) {
     if (Test-Path $f) {
