@@ -40,6 +40,11 @@ export default function ProfilesPage({ selectedId, onSelect }: Props) {
     load();
   };
 
+  const doCopy = async (p: Profile) => {
+    await api.copyProfile(p.id, { name: `${p.name} (Copy)` });
+    load();
+  };
+
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold text-text-primary">Profiles</h2>
@@ -133,6 +138,16 @@ export default function ProfilesPage({ selectedId, onSelect }: Props) {
                   }}
                 >
                   Edit
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-text-muted px-2"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    doCopy(p);
+                  }}
+                >
+                  Copy
                 </button>
                 <button
                   type="button"

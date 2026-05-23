@@ -178,6 +178,38 @@ def delete_profile(profile_id: str, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+@app.post("/api/profiles/{profile_id}/copy", response_model=ProfileOut)
+def copy_profile(profile_id: str, body: ProfileCreate, db: Session = Depends(get_db)):
+    source = db.get(Profile, profile_id)
+    if not source:
+        raise HTTPException(404, "Profile not found")
+    
+    new_profile = Profile(
+        name=body.name,
+        timezone=body.timezone or source.timezone,
+        enabled=body.enabled,
+        color=body.color,
+    )
+    db.add(new_profile)
+    db.flush()
+    
+    for action in source.actions:
+        new_action = ScheduledAction(
+            profile_id=new_profile.id,
+            label=action.label,
+            day_of_week=action.day_of_week,
+            time=action.time,
+            channel=action.channel,
+            enabled=action.enabled,
+            notification_config=dict(action.notification_config),
+        )
+        db.add(new_action)
+    
+    db.commit()
+    db.refresh(new_profile)
+    return new_profile
+
+
 # --- Actions ---
 
 @app.get("/api/profiles/{profile_id}/actions", response_model=list[ActionOut])

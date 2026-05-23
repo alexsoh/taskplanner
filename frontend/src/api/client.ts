@@ -49,6 +49,16 @@ export async function deleteProfile(id: string): Promise<void> {
   await json(await fetch(`${getApiBase()}/api/profiles/${id}`, { method: 'DELETE' }));
 }
 
+export async function copyProfile(id: string, body: Partial<Profile>): Promise<Profile> {
+  return json(
+    await fetch(`${getApiBase()}/api/profiles/${id}/copy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
 export async function listActions(profileId: string): Promise<ScheduledAction[]> {
   return json(await fetch(`${getApiBase()}/api/profiles/${profileId}/actions`));
 }

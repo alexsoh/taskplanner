@@ -170,15 +170,27 @@ mkdir -p "${APP_DIR}/logs"
 step "Starting TaskPlanner..."
 nohup "$PYTHON" -m uvicorn tp.main:app --host 0.0.0.0 --port "$PORT" \
     >> "${APP_DIR}/logs/taskplanner.log" 2>&1 &
-ok "Server started (PID $!, port $PORT)"
+SERVER_PID=$!
+ok "Server started (PID $SERVER_PID, port $PORT)"
 
-sleep 5
+sleep 3
 
 step "Verifying service..."
-if curl -sf "http://localhost:${PORT}/api/health" > /dev/null 2>&1; then
-  ok "Service is running and healthy"
-else
-  echo "    Health check failed -- server may still be starting up. Check logs/"
+MAX_HEALTH_CHECKS=60
+HEALTH_CHECK_PASSED=0
+for i in $(seq 1 $MAX_HEALTH_CHECKS); do
+  if curl -sf "http://localhost:${PORT}/api/health" > /dev/null 2>&1; then
+    ok "Service is running and healthy"
+    HEALTH_CHECK_PASSED=1
+    break
+  fi
+  if [ $i -lt $MAX_HEALTH_CHECKS ]; then
+    sleep 1
+  fi
+done
+
+if [ $HEALTH_CHECK_PASSED -eq 0 ]; then
+  echo "    [WARNING] Health check timed out after 60 seconds -- server may still be starting up. Check logs/"
 fi
 
 # Verify database integrity and settings

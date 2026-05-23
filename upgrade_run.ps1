@@ -100,19 +100,29 @@ try {
 
     Write-Step "Starting TaskPlanner service..."
     Run-Ext -NoThrow { & $Python service.py start 2>$null }
+    Start-Sleep -Seconds 3
     Write-Ok "Service started"
 
     Write-Step "Health check..."
-    $maxRetry = 30
+    $maxRetry = 60
+    $healthCheckPassed = $false
     for ($i = 0; $i -lt $maxRetry; $i++) {
         try {
             $response = Invoke-WebRequest -Uri "http://localhost:8200/api/health" -ErrorAction SilentlyContinue
             if ($response.StatusCode -eq 200) {
                 Write-Ok "Application is responding"
+                $healthCheckPassed = $true
                 break
             }
         } catch {}
-        if ($i -lt $maxRetry - 1) { Start-Sleep -Seconds 1 }
+        if ($i -lt $maxRetry - 1) { 
+            Start-Sleep -Seconds 1
+        }
+    }
+    
+    if (-not $healthCheckPassed) {
+        Write-Fail "Health check timed out after 60 seconds"
+        throw "Service failed to become healthy"
     }
 
     Write-Host ""
