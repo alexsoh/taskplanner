@@ -15,25 +15,9 @@ logger = logging.getLogger(__name__)
 APP_SLUG = "taskplanner"
 
 
-def _parse_version(version_str: str) -> tuple[int, int, int]:
-    """Parse semantic version string to tuple for comparison.
-    
-    Args:
-        version_str: Version string like "0.1.22" or "v0.1.22"
-        
-    Returns:
-        Tuple of (major, minor, patch)
-    """
-    try:
-        # Strip leading 'v' if present
-        clean_version = version_str.lstrip('v').strip()
-        parts = clean_version.split(".")
-        major = int(parts[0]) if len(parts) > 0 else 0
-        minor = int(parts[1]) if len(parts) > 1 else 0
-        patch = int(parts[2]) if len(parts) > 2 else 0
-        return (major, minor, patch)
-    except (IndexError, ValueError):
-        return (0, 0, 0)
+def _parse_version(version_str: str) -> tuple[int, ...]:
+    """Convert 'v1.2.3' or '1.2.3' to (1, 2, 3) for comparison."""
+    return tuple(int(x) for x in version_str.lstrip("v").split(".") if x.isdigit())
 
 
 def check_for_update(
