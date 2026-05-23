@@ -16,3 +16,15 @@ def migrate_add_upgrade_columns(db: Session) -> None:
             "ALTER TABLE app_settings ADD COLUMN evalex_base VARCHAR(255) DEFAULT 'https://evalex.duckdns.org'"
         ))
         db.commit()
+
+
+def migrate_add_ip_whitelist_and_port(db: Session) -> None:
+    """Add allowed_ips_json and server_port columns to app_settings table if they don't exist."""
+    try:
+        # Try to query the new columns to check if migration is needed
+        db.execute(text("SELECT allowed_ips_json, server_port FROM app_settings LIMIT 1"))
+    except Exception:
+        # Columns don't exist, add them
+        db.execute(text("ALTER TABLE app_settings ADD COLUMN allowed_ips_json JSON DEFAULT '{\"allowedIps\": [\"127.0.0.1\", \"::1\"]}'"))
+        db.execute(text("ALTER TABLE app_settings ADD COLUMN server_port INTEGER DEFAULT 8200"))
+        db.commit()

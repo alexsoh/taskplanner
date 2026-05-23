@@ -27,10 +27,11 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     # Run migrations
-    from .migrations import migrate_add_upgrade_columns
+    from .migrations import migrate_add_upgrade_columns, migrate_add_ip_whitelist_and_port
     db = SessionLocal()
     try:
         migrate_add_upgrade_columns(db)
+        migrate_add_ip_whitelist_and_port(db)
     finally:
         db.close()
 

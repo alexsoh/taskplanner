@@ -66,12 +66,16 @@ class SettingsOut(BaseModel):
     mqtt: Dict[str, Any]
     telegram: Dict[str, Any]
     upgradeToken: Optional[str] = None
+    allowedIps: Optional[List[str]] = None
+    serverPort: Optional[int] = None
 
 
 class SettingsUpdate(BaseModel):
     mqtt: Optional[Dict[str, Any]] = None
     telegram: Optional[Dict[str, Any]] = None
     upgradeToken: Optional[str] = None
+    allowedIps: Optional[List[str]] = None
+    serverPort: Optional[int] = None
 
 
 class ExecutionOut(BaseModel):

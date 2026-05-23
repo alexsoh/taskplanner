@@ -91,14 +91,25 @@ class TaskPlannerService(win32serviceutil.ServiceFramework):
 
             self._log("Loading application...")
             from tp.main import app
+            from tp.settings_store import get_server_port
+            from tp.db import SessionLocal
 
-            self._log("Starting uvicorn on 0.0.0.0:8200")
+            # Get port from database settings
+            try:
+                db = SessionLocal()
+                port = get_server_port(db)
+                db.close()
+            except Exception as e:
+                self._log(f"Failed to load port from settings, using default 8200: {e}")
+                port = 8200
+
+            self._log(f"Starting uvicorn on 0.0.0.0:{port}")
 
             import uvicorn
             uvicorn.run(
                 "tp.main:app",
                 host="0.0.0.0",
-                port=8200,
+                port=port,
                 log_level="info",
             )
         except Exception:

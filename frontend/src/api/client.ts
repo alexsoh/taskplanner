@@ -160,3 +160,37 @@ export async function installUpdate(token: string): Promise<{ status: string; lo
     }),
   );
 }
+
+export async function getServerConfig(): Promise<{ port: number; allowedIps: string[] }> {
+  return json(await fetch(`${API}/api/server/config`));
+}
+
+export async function updateAllowedIps(allowedIps: string[]): Promise<{ ok: boolean; allowedIps: string[] }> {
+  return json(
+    await fetch(`${API}/api/server/allowed-ips`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ allowedIps }),
+    }),
+  );
+}
+
+export async function updateServerPort(port: number): Promise<{ ok: boolean; port: number; message: string }> {
+  return json(
+    await fetch(`${API}/api/server/port`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port }),
+    }),
+  );
+}
+
+export async function allowClientIp(ip: string): Promise<{ ok?: boolean; added: boolean; ip: string; message?: string; allowedIps: string[] }> {
+  return json(
+    await fetch(`${API}/api/server/allow-client-ip`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip }),
+    }),
+  );
+}

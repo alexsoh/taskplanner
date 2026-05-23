@@ -81,3 +81,5 @@ class AppSettingsRow(Base):
     telegram_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     upgrade_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     evalex_base: Mapped[str] = mapped_column(String(255), nullable=False, default="https://evalex.duckdns.org")
+    allowed_ips_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    server_port: Mapped[int] = mapped_column(Integer, nullable=False, default=8200)

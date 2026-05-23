@@ -6,8 +6,8 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Body
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from . import APP_DIR
 from .action_runner import ActionRunError, configure_notifiers, run_scheduled_action, start_notifiers, stop_notifiers
 from .calendar import expand_calendar
 from .db import get_db, init_db
+from .ip_filter import IPWhitelistMiddleware, validate_ip_or_cidr
 from .models import ExecutionRun, Profile, ScheduledAction
 from .schemas import (
     ActionCreate,
@@ -28,12 +29,13 @@ from .schemas import (
     SettingsUpdate,
 )
 from .scheduler import scheduler_loop
-from .settings_store import load_mqtt_telegram, settings_to_api, update_settings, get_evalex_base
+from .settings_store import load_mqtt_telegram, settings_to_api, update_settings, get_evalex_base, get_allowed_ips
 from .updater import check_for_update, start_upgrade
 
 logger = logging.getLogger("taskplanner.main")
 
 _scheduler_task = None
+_ip_middleware: Optional[IPWhitelistMiddleware] = None
 _TIME_RE = re.compile(r"^\d{2}:\d{2}$")
 _CHANNELS = frozenset({"mqtt", "telegram", "http", "script", "nvr", "evalex"})
 
@@ -59,7 +61,7 @@ def _ensure_notification_id(config: dict) -> dict:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global _scheduler_task
+    global _scheduler_task, _ip_middleware
     logging.basicConfig(level=logging.INFO)
     init_db()
     logger.info("TaskPlanner starting")
@@ -70,6 +72,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         mqtt_s, tg_s = load_mqtt_telegram(db)
         configure_notifiers(mqtt_s, tg_s)
+        
+        # Initialize IP whitelist middleware
+        _ip_middleware = IPWhitelistMiddleware()
+        allowed_ips = get_allowed_ips(db)
+        _ip_middleware.update(allowed_ips)
     finally:
         db.close()
 
@@ -89,6 +96,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(title="TaskPlanner", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def apply_ip_filter(request: Request, call_next):
+    """Apply IP whitelist checks to all HTTP requests."""
+    if _ip_middleware:
+        client = request.client
+        peer = client.host if client else None
+        client_ip = _ip_middleware.effective_client_ip(peer)
+        if not client_ip:
+            client_ip = peer or "unknown"
+        if not _ip_middleware.is_allowed(client_ip):
+            logger.warning(f"Blocked request from {client_ip} (peer {peer})")
+            return PlainTextResponse("403 Forbidden", status_code=403)
+    return await call_next(request)
 
 
 @app.get("/api/health")
@@ -396,15 +418,140 @@ def put_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
     # Extract upgrade token and evalex base from body
     upgrade_token = getattr(body, 'upgradeToken', None)
     evalex_base = getattr(body, 'evalexBase', None)
+    allowed_ips = getattr(body, 'allowedIps', None)
+    server_port = getattr(body, 'serverPort', None)
     
     try:
-        data = update_settings(db, body.mqtt, body.telegram, upgrade_token, evalex_base)
+        data = update_settings(db, body.mqtt, body.telegram, upgrade_token, evalex_base, allowed_ips, server_port)
     except ValueError as e:
         raise HTTPException(400, str(e))
     
     mqtt_s, tg_s = load_mqtt_telegram(db)
     configure_notifiers(mqtt_s, tg_s)
+    
+    # Update IP middleware if allowed_ips changed
+    if _ip_middleware and allowed_ips is not None:
+        _ip_middleware.update(allowed_ips)
+    
     return SettingsOut(**data)
+
+
+# --- Static UI ---
+
+STATIC_DIR = APP_DIR / "static"
+INDEX_HTML = STATIC_DIR / "index.html"
+
+
+@app.get("/api/server/config")
+def get_server_config(db: Session = Depends(get_db)):
+    """Get server configuration (port and allowed IPs)."""
+    from .settings_store import get_allowed_ips, get_server_port
+    
+    allowed_ips = get_allowed_ips(db)
+    port = get_server_port(db)
+    return {"port": port, "allowedIps": allowed_ips}
+
+
+@app.put("/api/server/allowed-ips")
+def update_allowed_ips(body: dict, db: Session = Depends(get_db)):
+    """Update the IP whitelist."""
+    allowed_ips = body.get("allowedIps", [])
+    if not isinstance(allowed_ips, list):
+        raise HTTPException(400, "allowedIps must be a list")
+    
+    try:
+        data = update_settings(db, None, None, allowed_ips=allowed_ips)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    
+    # Update IP middleware
+    if _ip_middleware:
+        _ip_middleware.update(allowed_ips)
+    
+    return {"ok": True, "allowedIps": data.get("allowedIps", [])}
+
+
+@app.put("/api/server/port")
+def update_server_port(body: dict, db: Session = Depends(get_db)):
+    """Update the server port (requires restart to take effect)."""
+    port = body.get("port")
+    if port is None:
+        raise HTTPException(400, "port is required")
+    
+    try:
+        port = int(port)
+        if not (1 <= port <= 65535):
+            raise ValueError(f"Port must be between 1 and 65535")
+        data = update_settings(db, None, None, server_port=port)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    
+    return {"ok": True, "port": data.get("serverPort"), "message": "Port changed. Restart server to apply."}
+
+
+@app.post("/api/server/allow-client-ip")
+def allow_client_ip(body: dict = Body(default={}), db: Session = Depends(get_db)):
+    """Add an IP address to the whitelist.
+    
+    Can be called:
+    1. With IP in body: POST {"ip": "1.2.3.4"}
+    2. With empty body: POST {} - backend will detect public IP from api.ipify.org
+    
+    This allows external services to invoke the endpoint to whitelist themselves.
+    """
+    import httpx
+    from .settings_store import get_allowed_ips
+    
+    b = body or {}
+    raw_ip = str((b.get("Ip") if "Ip" in b else b.get("ip")) or "").strip()
+    
+    # If no IP provided, try to detect from api.ipify.org
+    if not raw_ip:
+        try:
+            with httpx.Client(timeout=8.0) as client:
+                response = client.get("https://api.ipify.org?format=json")
+                response.raise_for_status()
+                data = response.json()
+                raw_ip = str(data.get("ip") or "").strip()
+                if not raw_ip:
+                    raise ValueError("Empty IP in response")
+                # Validate the detected IP
+                import ipaddress
+                ipaddress.ip_address(raw_ip)
+        except Exception as e:
+            logger.warning(f"Failed to detect public IP from ipify: {e}")
+            raise HTTPException(502, "Could not detect public IP. Please provide IP in request body.")
+    
+    # Validate IP/CIDR
+    if not validate_ip_or_cidr(raw_ip):
+        raise HTTPException(400, f"Invalid IP or CIDR: {raw_ip}")
+    
+    candidate = raw_ip.split("/")[0] if "/" in raw_ip else raw_ip
+    add_entry = raw_ip
+    
+    allowed_ips = get_allowed_ips(db)
+    
+    # Check if already exists
+    already = any(
+        ip.split("/")[0] == candidate
+        for ip in allowed_ips
+    )
+    
+    if not already:
+        allowed_ips.append(add_entry)
+        try:
+            data = update_settings(db, None, None, allowed_ips=allowed_ips)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        
+        # Update IP middleware
+        if _ip_middleware:
+            _ip_middleware.update(data.get("allowedIps", []))
+        
+        logger.info(f"Added {add_entry} to IP whitelist")
+        return {"ip": add_entry, "added": True, "allowedIps": data.get("allowedIps", [])}
+    
+    return {"ip": add_entry, "added": False, "message": "That address is already in the whitelist.", "allowedIps": allowed_ips}
 
 
 # --- Static UI ---

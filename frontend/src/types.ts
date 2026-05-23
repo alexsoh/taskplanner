@@ -166,6 +166,8 @@ export interface AppSettings {
   mqtt: MqttSettings;
   telegram: TelegramSettings;
   upgradeToken?: string;
+  allowedIps?: string[];
+  serverPort?: number;
 }
 
 export interface UpdateCheckResponse {
