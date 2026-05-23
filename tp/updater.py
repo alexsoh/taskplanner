@@ -100,25 +100,25 @@ def start_upgrade(
         
         # On Windows, use PowerShell; on Unix, use bash
         if platform.system() == "Windows":
-            # Windows PowerShell upgrade
             ps_script = APP_DIR / "upgrade.ps1"
             if not ps_script.exists():
                 return {"error": "upgrade.ps1 not found"}
-            
-            args = [
+
+            cmd = [
                 "powershell.exe",
-                "-File", str(ps_script),
-                "-Token", token,
-                "-EvalexBase", evalex_base,
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(ps_script),
+                "-Token",
+                token,
+                "-EvalexBase",
+                evalex_base,
             ]
-            
-            # Spawn detached (hidden window)
-            subprocess.Popen(
-                args,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=0x08000000,  # CREATE_NO_WINDOW
-            )
+            # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP (same as PiyoAI)
+            creation_flags = 0x08000000 | 0x00000200
+            subprocess.Popen(cmd, creationflags=creation_flags, close_fds=False)
         else:
             # Unix: bash
             with open(log_path, "w") as log_file:

@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   build:
+    # Windows-only release build. Do not add macOS or Linux runners.
     runs-on: windows-latest
 
     steps:
@@ -51,7 +52,7 @@ jobs:
         run: |
           for ($i = 1; $i -le 3; $i++) {
             $ErrorActionPreference = 'Continue'
-            gh release upload "${{ github.event.release.tag_name }}" release/*.zip --clobber
+            gh release upload "${{ github.event.release.tag_name }}" release/taskplanner-*-windows-*.zip --clobber
             $ec = $LASTEXITCODE
             $ErrorActionPreference = 'Stop'
             if ($ec -eq 0) { exit 0 }

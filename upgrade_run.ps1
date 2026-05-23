@@ -42,11 +42,25 @@ $versionFile = Join-Path $AppDir "version.txt"
 $curVersion = if (Test-Path $versionFile) { (Get-Content $versionFile).Trim() } else { "unknown" }
 $backupDir = Join-Path $AppDir "backups\v${curVersion}_${timestamp}"
 
+$Port = 8200
+try {
+    $portOut = & $Python -c "from tp.db import SessionLocal; from tp.settings_store import get_server_port; db=SessionLocal(); print(get_server_port(db)); db.close()" 2>$null
+    if ($LASTEXITCODE -eq 0 -and $portOut) {
+        $Port = [int]($portOut.ToString().Trim())
+    }
+} catch {
+    # keep default
+}
+
+$excludes = @(
+    "python", "venv", "node_modules", "logs", "data", ".git", "backups",
+    "taskplanner_backup_*", "taskplanner_upgrade_tmp"
+)
+
 try {
     Write-Step "Stopping TaskPlanner service..."
     Run-Ext -NoThrow { & $Python service.py stop 2>$null }
 
-    # Wait for service to stop
     $svcName = "TaskPlanner"
     $maxWait = 30
     for ($i = 0; $i -lt $maxWait; $i++) {
@@ -58,7 +72,6 @@ try {
     }
     Start-Sleep -Seconds 2
 
-    # Try to release file locks
     $pydFile = Get-ChildItem -Path $AppDir -Filter "tp.*.pyd" -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($pydFile) {
         try {
@@ -71,10 +84,9 @@ try {
             Start-Sleep -Seconds 3
         }
     }
-    Write-Ok "Service stopped"
+    Write-Ok "Service stopped (using $Python)"
 
-    Write-Step "Backing up current source..."
-    $excludes = @("python", "venv", "node_modules", "logs", "settings.json", ".git", "backups", "taskplanner_backup_*", "taskplanner_upgrade_tmp")
+    Write-Step "Backing up current source to $backupDir..."
     $items = Get-ChildItem -Path $AppDir -Exclude $excludes -ErrorAction SilentlyContinue
     New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
     foreach ($item in $items) {
@@ -91,63 +103,90 @@ try {
     }
     Write-Ok "Files updated"
 
-    Write-Step "Reinstalling Python dependencies..."
     $reqFile = Join-Path $AppDir "requirements.txt"
     if (Test-Path $reqFile) {
-        Run-Ext { & $Python -m pip install --quiet -r $reqFile }
-        Write-Ok "Dependencies installed"
+        $reqHash = (Get-FileHash -Path $reqFile -Algorithm MD5).Hash
+        $hashFile = Join-Path $AppDir ".req_hash"
+        $storedHash = if (Test-Path $hashFile) { (Get-Content $hashFile).Trim() } else { "" }
+
+        if ($reqHash -eq $storedHash) {
+            Write-Ok "Python dependencies unchanged, skipping install"
+        } else {
+            Write-Step "Reinstalling Python dependencies..."
+            Run-Ext { & $Python -m pip install --no-warn-script-location -q -r $reqFile }
+            Set-Content -Path $hashFile -Value $reqHash -NoNewline
+            Write-Ok "Dependencies installed"
+        }
     }
 
+    $frontendDir = Join-Path $AppDir "frontend"
+    $staticIndex = Join-Path $AppDir "static\index.html"
+    $npmPath = Get-Command npm -ErrorAction SilentlyContinue
+    if (-not (Test-Path $frontendDir)) {
+        Write-Step "Pre-built release -- using existing static/"
+        Write-Ok "Skipped frontend build (compiled release)"
+    } elseif ($npmPath) {
+        Write-Step "Rebuilding frontend..."
+        Set-Location $frontendDir
+        Run-Ext { & npm install --silent }
+        Run-Ext { & npm run build --silent }
+        Set-Location $AppDir
+        Write-Ok "Frontend rebuilt"
+    } elseif (Test-Path $staticIndex) {
+        Write-Step "Frontend already pre-built in static/ -- skipping (npm not found)"
+    } else {
+        Write-Fail "No pre-built frontend and npm not found. Install Node.js 18+ to rebuild."
+        throw "Frontend build required but npm not available"
+    }
+
+    Write-Step "Updating service registration..."
+    Run-Ext -NoThrow { & $Python service.py update 2>$null }
+    Write-Ok "Service registration updated"
+
     Write-Step "Starting TaskPlanner service..."
-    Run-Ext -NoThrow { & $Python service.py start 2>$null }
+    Run-Ext { & $Python service.py start }
     Start-Sleep -Seconds 3
     Write-Ok "Service started"
 
-    Write-Step "Health check..."
-    $maxRetry = 60
-    $healthCheckPassed = $false
-    for ($i = 0; $i -lt $maxRetry; $i++) {
-        try {
-            $response = Invoke-WebRequest -Uri "http://localhost:8200/api/health" -UseBasicParsing -ErrorAction SilentlyContinue
-            if ($response.StatusCode -eq 200) {
-                Write-Ok "Application is responding"
-                $healthCheckPassed = $true
-                break
-            }
-        } catch {}
-        if ($i -lt $maxRetry - 1) { 
-            Start-Sleep -Seconds 1
+    Run-Ext -NoThrow { sc.exe failure TaskPlanner reset= 86400 actions= restart/10000/restart/30000/restart/60000 } | Out-Null
+    Write-Ok "Auto-restart on crash: enabled (10s / 30s / 60s backoff)"
+
+    Write-Step "Verifying service..."
+    try {
+        $response = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/api/health" -UseBasicParsing -TimeoutSec 10
+        if ($response.StatusCode -eq 200) {
+            Write-Ok "Service is running and healthy"
         }
-    }
-    
-    if (-not $healthCheckPassed) {
-        Write-Fail "Health check timed out after 60 seconds"
-        throw "Service failed to become healthy"
+    } catch {
+        Write-Fail "Service health check failed, but it may still be starting up"
     }
 
     Write-Host ""
     Write-Host "=== Upgrade completed successfully ===" -ForegroundColor Green
-    Write-Ok "New version is live at http://localhost:8200"
+    Write-Ok "New version is live at http://localhost:$Port"
     Write-Ok "Backup: $backupDir"
 
 } catch {
     Write-Fail "Upgrade failed: $($_.Exception.Message)"
     Write-Host ""
     Write-Host "Attempting to restore from backup..." -ForegroundColor Yellow
-    
-    if (Test-Path $backupDir) {
-        Write-Step "Restoring backup..."
-        foreach ($item in (Get-ChildItem -Path $backupDir)) {
-            $dest = Join-Path $AppDir $item.Name
-            if (Test-Path $dest) { Remove-Item -Path $dest -Recurse -Force -ErrorAction SilentlyContinue }
-            Copy-Item -Path $item.FullName -Destination $dest -Recurse -Force -ErrorAction SilentlyContinue
+
+    try {
+        Run-Ext -NoThrow { & $Python service.py stop 2>$null }
+        if (Test-Path $backupDir) {
+            Write-Step "Restoring backup..."
+            foreach ($item in (Get-ChildItem -Path $backupDir)) {
+                $dest = Join-Path $AppDir $item.Name
+                if (Test-Path $dest) { Remove-Item -Path $dest -Recurse -Force -ErrorAction SilentlyContinue }
+                Copy-Item -Path $item.FullName -Destination $dest -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            Write-Ok "Backup restored"
         }
-        Write-Ok "Backup restored"
-        
-        Write-Step "Restarting service..."
         Run-Ext -NoThrow { & $Python service.py start 2>$null }
-        Write-Ok "Service restarted"
+        Write-Ok "Previous version restarted"
+    } catch {
+        Write-Fail "Rollback also failed. Check backup and logs."
+        Write-Host "Manual intervention required. Backup at: $backupDir"
     }
-    
     exit 1
 }

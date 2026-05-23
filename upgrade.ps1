@@ -96,8 +96,7 @@ try {
     }
 
     Write-Step "Running upgrade logic from new package..."
-    $runArgs = @("-ExecutionPolicy", "Bypass", "-File", $runnerScript, "-AppDir", $AppDir, "-SourcePath", $runnerSource)
-    powershell @runArgs
+    powershell -NonInteractive -ExecutionPolicy Bypass -File $runnerScript -AppDir $AppDir -SourcePath $runnerSource
     if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
         throw "upgrade_run.ps1 exited with code $LASTEXITCODE"
     }

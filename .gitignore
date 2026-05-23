@@ -15,3 +15,4 @@ taskplanner_upgrade_tmp/
 taskplanner_update.zip
 python-embed.zip
 get-pip.py
+release/
