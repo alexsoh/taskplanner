@@ -19,13 +19,15 @@ def _parse_version(version_str: str) -> tuple[int, int, int]:
     """Parse semantic version string to tuple for comparison.
     
     Args:
-        version_str: Version string like "0.1.22"
+        version_str: Version string like "0.1.22" or "v0.1.22"
         
     Returns:
         Tuple of (major, minor, patch)
     """
     try:
-        parts = version_str.split(".")
+        # Strip leading 'v' if present
+        clean_version = version_str.lstrip('v').strip()
+        parts = clean_version.split(".")
         major = int(parts[0]) if len(parts) > 0 else 0
         minor = int(parts[1]) if len(parts) > 1 else 0
         patch = int(parts[2]) if len(parts) > 2 else 0
