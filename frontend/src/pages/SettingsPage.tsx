@@ -3,7 +3,7 @@ import * as api from '../api/client.ts';
 import type { AppSettings } from '../types.ts';
 import { UpdateSection } from '../components/UpdateSection.tsx';
 
-type SettingsTab = 'notifications' | 'server' | 'updates';
+type SettingsTab = 'notifications' | 'server' | 'updates' | 'logs';
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -13,10 +13,28 @@ export default function SettingsPage() {
   const [newIp, setNewIp] = useState('');
   const [addingIp, setAddingIp] = useState(false);
   const [addingClientIp, setAddingClientIp] = useState(false);
+  const [logs, setLogs] = useState<{ taskplanner: string; upgrade: string }>({ taskplanner: '', upgrade: '' });
+  const [loadingLogs, setLoadingLogs] = useState(false);
 
   useEffect(() => {
     api.getSettings().then(setSettings).catch((e) => setError(String(e)));
   }, []);
+
+  const loadLogs = async () => {
+    setLoadingLogs(true);
+    try {
+      const tpResult = await fetch('/api/logs/taskplanner').then(r => r.json());
+      const upgResult = await fetch('/api/logs/upgrade').then(r => r.json()).catch(() => ({ content: '(upgrade log not available)' }));
+      setLogs({
+        taskplanner: tpResult.content || '',
+        upgrade: upgResult.content || '',
+      });
+    } catch (e) {
+      setError(`Failed to load logs: ${e}`);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
 
   const save = async () => {
     if (!settings) return;
@@ -31,17 +49,14 @@ export default function SettingsPage() {
         allowedIps: settings.allowedIps,
         serverPort: settings.serverPort,
       };
-      console.log('Saving settings:', updatePayload);
       const s = await api.updateSettings(updatePayload);
-      console.log('Save response:', s);
       setSettings(s);
-      setStatus('Saved');
-      setTimeout(() => setStatus(''), 2000);
+      setStatus(`Saved successfully${s.upgradeToken ? ' (token persisted)' : ''}`);
+      setTimeout(() => setStatus(''), 3000);
     } catch (e) {
       const errorMsg = String(e);
       setStatus('');
-      setError(errorMsg);
-      console.error('Save error:', errorMsg);
+      setError(`Save failed: ${errorMsg}`);
     }
   };
 
@@ -188,6 +203,16 @@ export default function SettingsPage() {
           }`}
         >
           Updates
+        </button>
+        <button
+          onClick={() => { setActiveTab('logs'); loadLogs(); }}
+          className={`px-4 py-2 font-medium text-sm transition ${
+            activeTab === 'logs'
+              ? 'border-b-2 border-accent text-accent'
+              : 'text-text-muted hover:text-text'
+          }`}
+        >
+          Logs
         </button>
       </div>
 
@@ -397,17 +422,49 @@ export default function SettingsPage() {
         />
       )}
 
+      {/* Logs Tab */}
+      {activeTab === 'logs' && (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={loadLogs}
+              disabled={loadingLogs}
+              className="px-4 py-2 bg-accent text-bg-primary rounded text-sm font-medium disabled:opacity-50"
+            >
+              {loadingLogs ? 'Loading...' : 'Refresh Logs'}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="font-medium">TaskPlanner Log</h3>
+            <pre className="bg-bg-tertiary border border-border rounded p-3 text-xs overflow-auto max-h-64 font-mono">
+              {logs.taskplanner || '(no logs)'}
+            </pre>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="font-medium">Upgrade Log</h3>
+            <pre className="bg-bg-tertiary border border-border rounded p-3 text-xs overflow-auto max-h-64 font-mono">
+              {logs.upgrade || '(no logs)'}
+            </pre>
+          </div>
+        </div>
+      )}
+
       {/* Bottom Save Button */}
-      <div className="space-y-2 pt-4 border-t border-border">
-        <button
-          type="button"
-          onClick={save}
-          className="px-4 py-2 bg-accent text-bg-primary rounded text-sm font-medium"
-        >
-          Save settings
-        </button>
-        {status && <p className="text-xs text-text-muted">{status}</p>}
-      </div>
+      {activeTab !== 'logs' && (
+        <div className="space-y-2 pt-4 border-t border-border">
+          <button
+            type="button"
+            onClick={save}
+            className="px-4 py-2 bg-accent text-bg-primary rounded text-sm font-medium"
+          >
+            Save settings
+          </button>
+          {status && <p className="text-xs text-text-muted">{status}</p>}
+        </div>
+      )}
     </div>
   );
 }

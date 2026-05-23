@@ -120,6 +120,28 @@ def health():
     return {"ok": True, "version": __version__}
 
 
+@app.get("/api/logs/{filename}")
+def get_logs(filename: str):
+    """Get recent log file content. Filename must be 'taskplanner' or 'upgrade'."""
+    from pathlib import Path
+    
+    if filename not in ("taskplanner", "upgrade"):
+        raise HTTPException(400, "filename must be 'taskplanner' or 'upgrade'")
+    
+    log_file = APP_DIR / "logs" / f"{filename}.log"
+    if not log_file.exists():
+        raise HTTPException(404, f"Log file not found: {filename}.log")
+    
+    try:
+        content = log_file.read_text(encoding="utf-8", errors="ignore")
+        # Return last 100 lines
+        lines = content.split("\n")
+        recent = "\n".join(lines[-100:])
+        return {"filename": filename, "content": recent}
+    except Exception as e:
+        raise HTTPException(500, f"Error reading log: {e}")
+
+
 @app.get("/api/version")
 def get_version():
     from . import __version__

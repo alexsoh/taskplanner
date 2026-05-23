@@ -220,3 +220,38 @@ echo "=== Upgrade complete! ==="
 echo "  Backup:  $BACKUP_DIR"
 echo "  Web UI:  http://localhost:${PORT}"
 echo ""
+
+# Verify database integrity and settings
+step "Verifying settings persistence..."
+SETTINGS_CHECK=$("$PYTHON" << 'PYTHON_EOF'
+import sqlite3
+from pathlib import Path
+import sys
+
+db_path = Path("data/taskplanner.db")
+if not db_path.exists():
+    print("ERROR: Database not found")
+    sys.exit(1)
+
+try:
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    cursor.execute("SELECT upgrade_token FROM app_settings WHERE id=1")
+    result = cursor.fetchone()
+    if result and result[0]:
+        print(f"OK: upgrade_token preserved: {result[0][:10]}...")
+    else:
+        print("WARNING: upgrade_token is empty/NULL")
+    conn.close()
+except Exception as e:
+    print(f"ERROR: {e}")
+    sys.exit(1)
+PYTHON_EOF
+)
+echo "    $SETTINGS_CHECK"
+
+echo ""
+echo "=== Upgrade complete! ==="
+echo "  Backup:  $BACKUP_DIR"
+echo "  Web UI:  http://localhost:${PORT}"
+echo ""
