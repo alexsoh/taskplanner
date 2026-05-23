@@ -73,7 +73,7 @@ cp tp.cpython-*.so "$RELEASE_DIR/"
 cp -r static "$RELEASE_DIR/"
 cp requirements.txt "$RELEASE_DIR/"
 
-for f in serve.sh upgrade.sh; do
+for f in serve.sh upgrade.sh upgrade_run.sh setup.sh; do
     if [ -f "$f" ]; then
         cp "$f" "$RELEASE_DIR/"
         chmod +x "$RELEASE_DIR/$f"

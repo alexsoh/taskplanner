@@ -81,7 +81,7 @@ Copy-Item -Recurse "static" (Join-Path $releaseDir "static")
 Copy-Item "requirements.txt" $releaseDir\
 
 $scriptFiles = @(
-    "serve.sh", "upgrade.sh", "README.md"
+    "serve.sh", "serve.ps1", "upgrade.sh", "upgrade.ps1", "upgrade_run.sh", "upgrade_run.ps1", "setup.sh", "setup.ps1", "README.md"
 )
 foreach ($f in $scriptFiles) {
     if (Test-Path $f) {

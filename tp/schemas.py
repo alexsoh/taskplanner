@@ -65,11 +65,13 @@ class ActionOut(BaseModel):
 class SettingsOut(BaseModel):
     mqtt: Dict[str, Any]
     telegram: Dict[str, Any]
+    upgradeToken: Optional[str] = None
 
 
 class SettingsUpdate(BaseModel):
     mqtt: Optional[Dict[str, Any]] = None
     telegram: Optional[Dict[str, Any]] = None
+    upgradeToken: Optional[str] = None
 
 
 class ExecutionOut(BaseModel):

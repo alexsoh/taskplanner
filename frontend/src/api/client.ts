@@ -5,6 +5,7 @@ import type {
   NotificationChannel,
   Profile,
   ScheduledAction,
+  UpdateCheckResponse,
 } from '../types.ts';
 
 const API = '';
@@ -132,6 +133,30 @@ export async function discoverCameras(app: string, serverAddress: string): Promi
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ app, serverAddress }),
+    }),
+  );
+}
+
+export async function getVersion(): Promise<{ version: string }> {
+  return json(await fetch(`${API}/api/version`));
+}
+
+export async function checkForUpdate(token: string): Promise<UpdateCheckResponse> {
+  return json(
+    await fetch(`${API}/api/update/check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    }),
+  );
+}
+
+export async function installUpdate(token: string): Promise<{ status: string; logPath: string }> {
+  return json(
+    await fetch(`${API}/api/update/install`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
     }),
   );
 }

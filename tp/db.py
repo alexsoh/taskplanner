@@ -26,6 +26,13 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    # Run migrations
+    from .migrations import migrate_add_upgrade_columns
+    db = SessionLocal()
+    try:
+        migrate_add_upgrade_columns(db)
+    finally:
+        db.close()
 
 
 def get_db() -> Generator[Session, None, None]:

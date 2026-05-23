@@ -79,3 +79,5 @@ class AppSettingsRow(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     mqtt_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     telegram_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    upgrade_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    evalex_base: Mapped[str] = mapped_column(String(255), nullable=False, default="https://evalex.duckdns.org")

@@ -165,4 +165,14 @@ export interface CalendarEvent {
 export interface AppSettings {
   mqtt: MqttSettings;
   telegram: TelegramSettings;
+  upgradeToken?: string;
+}
+
+export interface UpdateCheckResponse {
+  currentVersion: string;
+  latestVersion: string;
+  updateAvailable: boolean;
+  changeSummary: string;
+  tokenExpiresAt?: string;
+  error?: string;
 }

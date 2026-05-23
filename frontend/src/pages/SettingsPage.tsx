@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import * as api from '../api/client.ts';
 import type { AppSettings } from '../types.ts';
+import { UpdateSection } from '../components/UpdateSection.tsx';
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -106,6 +107,11 @@ export default function SettingsPage() {
           />
         </label>
       </section>
+
+      <UpdateSection
+        upgradeToken={settings.upgradeToken}
+        onTokenChange={(token) => setSettings({ ...settings, upgradeToken: token })}
+      />
 
       <button type="button" onClick={save} className="px-4 py-2 bg-accent text-bg-primary rounded text-sm font-medium">
         Save settings

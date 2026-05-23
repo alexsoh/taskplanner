@@ -28,7 +28,8 @@ from .schemas import (
     SettingsUpdate,
 )
 from .scheduler import scheduler_loop
-from .settings_store import load_mqtt_telegram, settings_to_api, update_settings
+from .settings_store import load_mqtt_telegram, settings_to_api, update_settings, get_evalex_base
+from .updater import check_for_update, start_upgrade
 
 logger = logging.getLogger("taskplanner.main")
 
@@ -95,6 +96,13 @@ def health():
     from . import __version__
 
     return {"ok": True, "version": __version__}
+
+
+@app.get("/api/version")
+def get_version():
+    from . import __version__
+
+    return {"version": __version__}
 
 
 # --- Profiles ---
@@ -343,6 +351,38 @@ def list_executions(
     return q.limit(limit).all()
 
 
+# --- Update ---
+
+@app.post("/api/update/check")
+def check_update(body: dict, db: Session = Depends(get_db)):
+    token = body.get("token", "").strip()
+    
+    if not token:
+        raise HTTPException(400, "token is required")
+    
+    evalex_base = get_evalex_base(db)
+    result = check_for_update(token, evalex_base)
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    
+    return result
+
+
+@app.post("/api/update/install")
+def install_update(body: dict, db: Session = Depends(get_db)):
+    token = body.get("token", "").strip()
+    
+    if not token:
+        raise HTTPException(400, "token is required")
+    
+    evalex_base = get_evalex_base(db)
+    result = start_upgrade(token, evalex_base)
+    if "error" in result:
+        raise HTTPException(500, result["error"])
+    
+    return JSONResponse(result, status_code=202)
+
+
 # --- Settings ---
 
 @app.get("/api/settings", response_model=SettingsOut)
@@ -353,7 +393,15 @@ def get_settings(db: Session = Depends(get_db)):
 
 @app.put("/api/settings", response_model=SettingsOut)
 def put_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
-    data = update_settings(db, body.mqtt, body.telegram)
+    # Extract upgrade token and evalex base from body
+    upgrade_token = getattr(body, 'upgradeToken', None)
+    evalex_base = getattr(body, 'evalexBase', None)
+    
+    try:
+        data = update_settings(db, body.mqtt, body.telegram, upgrade_token, evalex_base)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    
     mqtt_s, tg_s = load_mqtt_telegram(db)
     configure_notifiers(mqtt_s, tg_s)
     return SettingsOut(**data)
