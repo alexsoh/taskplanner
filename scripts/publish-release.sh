@@ -74,7 +74,7 @@ fi
 NEW_VER="$(
   cd "$ROOT"
   python3 - "$BUMP_KIND" "$DRY_RUN" <<'PY'
-import pathlib, re, sys
+import pathlib, re, sys, json
 
 kind, dry_arg = sys.argv[1], sys.argv[2]
 dry = dry_arg == "1"
@@ -101,6 +101,13 @@ new_text = text[: m.start()] + prefix + new_v + suffix + text[m.end() :]
 if not dry:
     path.write_text(new_text, encoding="utf-8")
     sys.stderr.write(f"Updated tp/__init__.py: {new_v}\n")
+    # Also update frontend/package.json
+    pkg_path = pathlib.Path("frontend/package.json")
+    pkg = json.loads(pkg_path.read_text(encoding="utf-8"))
+    if pkg.get("version") != new_v:
+        pkg["version"] = new_v
+        pkg_path.write_text(json.dumps(pkg, indent=2) + "\n", encoding="utf-8")
+        sys.stderr.write(f"Updated frontend/package.json: {new_v}\n")
 else:
     sys.stderr.write(f"DRY RUN: would update to {new_v}\n")
 print(new_v)
