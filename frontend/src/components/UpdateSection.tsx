@@ -11,7 +11,7 @@ export function UpdateSection({
   upgradeToken = '',
   onTokenChange,
 }: UpdateSectionProps) {
-  const [token, setToken] = useState(upgradeToken);
+  const [token, setToken] = useState<string>(upgradeToken ?? '');
   const [checkResult, setCheckResult] = useState<UpdateCheckResponse | null>(null);
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -22,7 +22,7 @@ export function UpdateSection({
 
   // Sync token from props when upgradeToken changes (e.g., on page load or after save)
   useEffect(() => {
-    setToken(upgradeToken);
+    setToken(upgradeToken ?? '');
   }, [upgradeToken]);
 
   // Poll version during upgrade
@@ -65,14 +65,6 @@ export function UpdateSection({
       clearTimeout(delayTimer);
     };
   }, [installing, checkResult]);
-
-  const handleSaveToken = () => {
-    if (onTokenChange) {
-      onTokenChange(token);
-    }
-    setStatusMsg('Token saved');
-    setTimeout(() => setStatusMsg(''), 3000);
-  };
 
   const handleCheckForUpdates = async () => {
     if (!token) {
@@ -150,22 +142,18 @@ export function UpdateSection({
 
       <label className="block text-sm space-y-1">
         Download Token
-        <div className="flex gap-2">
-          <input
-            type="password"
-            className="flex-1 px-2 py-1.5 bg-bg-tertiary border border-border rounded"
-            placeholder="evlx_..."
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-          />
-          <button
-            type="button"
-            onClick={handleSaveToken}
-            className="px-3 py-1.5 bg-bg-tertiary border border-border rounded hover:bg-bg-quaternary text-sm font-medium transition"
-          >
-            Save
-          </button>
-        </div>
+        <input
+          type="password"
+          className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded"
+          placeholder="evlx_..."
+          value={token}
+          onChange={(e) => {
+            setToken(e.target.value);
+            if (onTokenChange) {
+              onTokenChange(e.target.value);
+            }
+          }}
+        />
       </label>
 
       <div className="flex gap-2 pt-2">

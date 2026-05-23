@@ -21,14 +21,27 @@ export default function SettingsPage() {
   const save = async () => {
     if (!settings) return;
     setStatus('Saving…');
+    setError('');
     try {
-      const s = await api.updateSettings(settings);
+      // Create a clean update payload that includes upgradeToken
+      const updatePayload: Partial<AppSettings> = {
+        mqtt: settings.mqtt,
+        telegram: settings.telegram,
+        upgradeToken: settings.upgradeToken,
+        allowedIps: settings.allowedIps,
+        serverPort: settings.serverPort,
+      };
+      console.log('Saving settings:', updatePayload);
+      const s = await api.updateSettings(updatePayload);
+      console.log('Save response:', s);
       setSettings(s);
       setStatus('Saved');
       setTimeout(() => setStatus(''), 2000);
     } catch (e) {
+      const errorMsg = String(e);
       setStatus('');
-      setError(String(e));
+      setError(errorMsg);
+      console.error('Save error:', errorMsg);
     }
   };
 
@@ -378,37 +391,23 @@ export default function SettingsPage() {
 
       {/* Updates Tab */}
       {activeTab === 'updates' && (
-        <>
-          <UpdateSection
-            upgradeToken={settings.upgradeToken}
-            onTokenChange={(token) => setSettings({ ...settings, upgradeToken: token })}
-          />
-          <div className="space-y-2 pt-4 border-t border-border">
-            <button
-              type="button"
-              onClick={save}
-              className="px-4 py-2 bg-accent text-bg-primary rounded text-sm font-medium"
-            >
-              Save settings
-            </button>
-            {status && <p className="text-xs text-text-muted">{status}</p>}
-          </div>
-        </>
+        <UpdateSection
+          upgradeToken={settings.upgradeToken}
+          onTokenChange={(token) => setSettings({ ...settings, upgradeToken: token })}
+        />
       )}
 
-      {/* Bottom Save Button for other tabs */}
-      {activeTab !== 'updates' && (
-        <div className="space-y-2 pt-4 border-t border-border">
-          <button
-            type="button"
-            onClick={save}
-            className="px-4 py-2 bg-accent text-bg-primary rounded text-sm font-medium"
-          >
-            Save settings
-          </button>
-          {status && <p className="text-xs text-text-muted">{status}</p>}
-        </div>
-      )}
+      {/* Bottom Save Button */}
+      <div className="space-y-2 pt-4 border-t border-border">
+        <button
+          type="button"
+          onClick={save}
+          className="px-4 py-2 bg-accent text-bg-primary rounded text-sm font-medium"
+        >
+          Save settings
+        </button>
+        {status && <p className="text-xs text-text-muted">{status}</p>}
+      </div>
     </div>
   );
 }
