@@ -378,13 +378,25 @@ export default function SettingsPage() {
 
       {/* Updates Tab */}
       {activeTab === 'updates' && (
-        <UpdateSection
-          upgradeToken={settings.upgradeToken}
-          onTokenChange={(token) => setSettings({ ...settings, upgradeToken: token })}
-        />
+        <>
+          <UpdateSection
+            upgradeToken={settings.upgradeToken}
+            onTokenChange={(token) => setSettings({ ...settings, upgradeToken: token })}
+          />
+          <div className="space-y-2 pt-4 border-t border-border">
+            <button
+              type="button"
+              onClick={save}
+              className="px-4 py-2 bg-accent text-bg-primary rounded text-sm font-medium"
+            >
+              Save settings
+            </button>
+            {status && <p className="text-xs text-text-muted">{status}</p>}
+          </div>
+        </>
       )}
 
-      {/* Bottom Save Button */}
+      {/* Bottom Save Button for other tabs */}
       {activeTab !== 'updates' && (
         <div className="space-y-2 pt-4 border-t border-border">
           <button

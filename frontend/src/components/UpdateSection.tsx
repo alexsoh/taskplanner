@@ -20,6 +20,11 @@ export function UpdateSection({
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [logPath, setLogPath] = useState('');
 
+  // Sync token from props when upgradeToken changes (e.g., on page load or after save)
+  useEffect(() => {
+    setToken(upgradeToken);
+  }, [upgradeToken]);
+
   // Poll version during upgrade
   useEffect(() => {
     if (!installing) return;
