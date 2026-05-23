@@ -24,8 +24,6 @@ Set-Location $AppDir
 
 $PythonDir = Join-Path $AppDir "python"
 $PythonExe = Join-Path $PythonDir "python.exe"
-$VenvDir = Join-Path $AppDir "venv"
-$VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 
 $MajorMinor = ($PythonVersion -split '\.')[0..1] -join ''
 $PthFile = Join-Path $PythonDir "python${MajorMinor}._pth"
@@ -105,22 +103,9 @@ if (Test-Path $PipExe) {
     }
 }
 
-# --- Step 4: Create venv and install dependencies ---
-Write-Step "Creating virtual environment (venv/)..."
-
-if (-not (Test-Path $VenvPython)) {
-    & $PythonExe -m venv $VenvDir
-    if (-not (Test-Path $VenvPython)) {
-        Write-Fail "venv creation failed"
-        exit 1
-    }
-    Write-Ok "venv created"
-} else {
-    Write-Ok "venv already exists -- skipping"
-}
-
+# --- Step 4: Install Python dependencies ---
 Write-Step "Installing Python dependencies..."
-& $VenvPython -m pip install -q -r (Join-Path $AppDir "requirements.txt") 2>&1 | ForEach-Object { Write-Host "    $_" }
+& $PythonExe -m pip install --no-warn-script-location -q -r (Join-Path $AppDir "requirements.txt") 2>&1 | ForEach-Object { Write-Host "    $_" }
 Write-Ok "Dependencies installed"
 
 # --- Step 5: Build frontend ---
@@ -153,8 +138,11 @@ Write-Host "========================================" -ForegroundColor Green
 Write-Host "  Setup complete!                       " -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Python: $VenvPython"
+Write-Host "  Python: $PythonExe"
 Write-Host ""
 Write-Host "  To start TaskPlanner:"
 Write-Host "    .\serve.ps1" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "  To install as a Windows service:"
+Write-Host "    .\install_service.bat  (run as Administrator)" -ForegroundColor Yellow
 Write-Host ""

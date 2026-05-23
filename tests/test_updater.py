@@ -134,6 +134,8 @@ class TestCheckForUpdate:
     @mock.patch("tp.updater.httpx.Client")
     def test_check_for_update_success(self, mock_client_class):
         """Test successful update check."""
+        from tp import __version__
+        
         mock_response = mock.Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
@@ -150,7 +152,7 @@ class TestCheckForUpdate:
 
         result = check_for_update("evlx_test")
 
-        assert result["currentVersion"] == "0.1.22"  # From tp.__init__
+        assert result["currentVersion"] == __version__
         assert result["latestVersion"] == "0.2.0"
         assert result["updateAvailable"] is True
         assert result["changeSummary"] == "Bug fixes and improvements"
