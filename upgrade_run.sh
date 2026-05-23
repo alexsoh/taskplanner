@@ -113,6 +113,13 @@ done
 shopt -u nullglob
 ok "Backup created at $BACKUP_DIR"
 
+# Explicitly preserve data directory (database with settings/token)
+if [ -d "$APP_DIR/data" ]; then
+  mkdir -p "$BACKUP_DIR/data"
+  cp -r "$APP_DIR/data"/* "$BACKUP_DIR/data/" 2>/dev/null || true
+  ok "Database backed up separately"
+fi
+
 step "Updating source files from $SOURCE_PATH..."
 COPY_EXCLUDES=("venv" "python" "node_modules" "logs" "data" "backups" ".git" ".req_hash"
                "taskplanner_backup_*" "taskplanner_upgrade_tmp")
@@ -173,6 +180,35 @@ if curl -sf "http://localhost:${PORT}/api/health" > /dev/null 2>&1; then
 else
   echo "    Health check failed -- server may still be starting up. Check logs/"
 fi
+
+# Verify database integrity and settings
+step "Verifying settings persistence..."
+SETTINGS_CHECK=$("$PYTHON" << 'PYTHON_EOF'
+import sqlite3
+from pathlib import Path
+import sys
+
+db_path = Path("data/taskplanner.db")
+if not db_path.exists():
+    print("ERROR: Database not found")
+    sys.exit(1)
+
+try:
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    cursor.execute("SELECT upgrade_token FROM app_settings WHERE id=1")
+    result = cursor.fetchone()
+    if result and result[0]:
+        print(f"OK: upgrade_token preserved: {result[0][:10]}...")
+    else:
+        print("WARNING: upgrade_token is empty/NULL")
+    conn.close()
+except Exception as e:
+    print(f"ERROR: {e}")
+    sys.exit(1)
+PYTHON_EOF
+)
+echo "    $SETTINGS_CHECK"
 
 echo ""
 echo "=== Upgrade complete! ==="

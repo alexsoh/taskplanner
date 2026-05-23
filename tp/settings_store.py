@@ -111,8 +111,9 @@ def update_settings(
             if row.upgrade_token:
                 raise ValueError("Cannot clear upgrade token; omit the field to keep existing value")
         else:
-            # Set non-empty token
+            # Set non-empty token (never set to None/null)
             row.upgrade_token = upgrade_token
+    # If upgrade_token is None, do nothing - preserves existing value
     
     # Handle evalex base
     if evalex_base is not None:

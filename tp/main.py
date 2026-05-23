@@ -415,14 +415,17 @@ def get_settings(db: Session = Depends(get_db)):
 
 @app.put("/api/settings", response_model=SettingsOut)
 def put_settings(body: SettingsUpdate, db: Session = Depends(get_db)):
-    # Extract upgrade token and evalex base from body
-    upgrade_token = getattr(body, 'upgradeToken', None)
-    evalex_base = getattr(body, 'evalexBase', None)
-    allowed_ips = getattr(body, 'allowedIps', None)
-    server_port = getattr(body, 'serverPort', None)
+    # Only pass fields that were actually provided in the request body
+    # Use model_fields_set to detect which fields the client sent
+    upgrade_token = body.upgradeToken if 'upgradeToken' in body.model_fields_set else None
+    evalex_base = body.evalexBase if 'evalexBase' in body.model_fields_set else None
+    allowed_ips = body.allowedIps if 'allowedIps' in body.model_fields_set else None
+    server_port = body.serverPort if 'serverPort' in body.model_fields_set else None
     
     try:
-        data = update_settings(db, body.mqtt, body.telegram, upgrade_token, evalex_base, allowed_ips, server_port)
+        data = update_settings(db, body.mqtt if 'mqtt' in body.model_fields_set else None, 
+                             body.telegram if 'telegram' in body.model_fields_set else None, 
+                             upgrade_token, evalex_base, allowed_ips, server_port)
     except ValueError as e:
         raise HTTPException(400, str(e))
     
