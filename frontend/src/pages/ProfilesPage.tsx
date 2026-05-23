@@ -11,6 +11,8 @@ export default function ProfilesPage({ selectedId, onSelect }: Props) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [error, setError] = useState('');
   const [newName, setNewName] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
 
   const load = () => api.listProfiles().then(setProfiles).catch((e) => setError(String(e)));
 
@@ -22,6 +24,19 @@ export default function ProfilesPage({ selectedId, onSelect }: Props) {
     if (!newName.trim()) return;
     await api.createProfile({ name: newName.trim(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
     setNewName('');
+    load();
+  };
+
+  const startEdit = (p: Profile) => {
+    setEditingId(p.id);
+    setEditingName(p.name);
+  };
+
+  const saveEdit = async () => {
+    if (!editingName.trim() || !editingId) return;
+    await api.updateProfile(editingId, { name: editingName.trim() });
+    setEditingId(null);
+    setEditingName('');
     load();
   };
 
@@ -52,8 +67,26 @@ export default function ProfilesPage({ selectedId, onSelect }: Props) {
           >
             <span className="w-3 h-3 rounded-full shrink-0" style={{ background: p.color }} />
             <div className="flex-1 min-w-0">
-              <div className="font-medium truncate">{p.name}</div>
-              <div className="text-xs text-text-muted">{p.timezone}</div>
+              {editingId === p.id ? (
+                <input
+                  type="text"
+                  className="w-full px-2 py-1 bg-bg-secondary border border-accent rounded text-sm font-medium"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') saveEdit();
+                    if (e.key === 'Escape') setEditingId(null);
+                  }}
+                  autoFocus
+                />
+              ) : (
+                <>
+                  <div className="font-medium truncate">{p.name}</div>
+                  <div className="text-xs text-text-muted">{p.timezone}</div>
+                </>
+              )}
             </div>
             <label className="flex items-center gap-1 text-xs" onClick={(e) => e.stopPropagation()}>
               <input
@@ -66,19 +99,56 @@ export default function ProfilesPage({ selectedId, onSelect }: Props) {
               />
               On
             </label>
-            <button
-              type="button"
-              className="text-xs text-error px-2"
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (!confirm(`Delete profile "${p.name}"?`)) return;
-                await api.deleteProfile(p.id);
-                if (selectedId === p.id) onSelect(null);
-                load();
-              }}
-            >
-              Delete
-            </button>
+            {editingId === p.id ? (
+              <>
+                <button
+                  type="button"
+                  className="text-xs text-accent px-2"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    saveEdit();
+                  }}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-text-muted px-2"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingId(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="text-xs text-text-muted px-2"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startEdit(p);
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-error px-2"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!confirm(`Delete profile "${p.name}"?`)) return;
+                    await api.deleteProfile(p.id);
+                    if (selectedId === p.id) onSelect(null);
+                    load();
+                  }}
+                >
+                  Delete
+                </button>
+              </>
+            )}
           </li>
         ))}
       </ul>
