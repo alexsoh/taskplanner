@@ -8,6 +8,9 @@ from pathlib import Path
 import pytest
 from tp.db import SessionLocal
 from tp.models import AppSettingsRow
+from fastapi.testclient import TestClient
+
+from tp.main import app
 from tp.settings_store import get_or_create_settings, update_settings, settings_to_api
 from tp.updater import check_for_update, start_upgrade, _parse_version
 
@@ -126,6 +129,36 @@ class TestParseVersion:
         v3 = _parse_version("0.1.22")
         v4 = _parse_version("0.1.22")
         assert v3 == v4
+
+
+class TestUpdateCheckEndpoint:
+    """Test /api/update/check HTTP handler (eVaultex proxy sends empty body)."""
+
+    @mock.patch("tp.main.get_evalex_base", return_value="https://evalex.example.test")
+    @mock.patch("tp.main.get_upgrade_token", return_value="evlx_saved")
+    @mock.patch("tp.main.check_for_update")
+    def test_check_uses_stored_token_when_body_empty(self, mock_check, _mock_token, _mock_base):
+        mock_check.return_value = {
+            "currentVersion": "0.1.0",
+            "latestVersion": "0.2.0",
+            "updateAvailable": True,
+            "changeSummary": "",
+            "tokenExpiresAt": None,
+        }
+
+        client = TestClient(app)
+        resp = client.post("/api/update/check", json={})
+
+        assert resp.status_code == 200, resp.text
+        mock_check.assert_called_once_with("evlx_saved", "https://evalex.example.test")
+
+    @mock.patch("tp.main.get_upgrade_token", return_value="")
+    def test_check_missing_token_returns_error_body(self, _mock_token):
+        client = TestClient(app)
+        resp = client.post("/api/update/check", json={})
+
+        assert resp.status_code == 200, resp.text
+        assert "Download Token" in resp.json().get("error", "")
 
 
 class TestCheckForUpdate:

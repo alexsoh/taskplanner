@@ -1,31 +1,54 @@
 """Database migrations for TaskPlanner."""
 
+import logging
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+logger = logging.getLogger("taskplanner.migrations")
+
+
+def _table_exists(db: Session, table: str) -> bool:
+    row = db.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name=:name"),
+        {"name": table},
+    ).first()
+    return row is not None
+
 
 def _column_exists(db: Session, table: str, column: str) -> bool:
+    if not _table_exists(db, table):
+        return False
     rows = db.execute(text(f"PRAGMA table_info({table})")).fetchall()
     return any(row[1] == column for row in rows)
 
 
 def migrate_add_upgrade_columns(db: Session) -> None:
     """Add upgrade_token and evalex_base columns to app_settings table if they don't exist."""
-    if _column_exists(db, "app_settings", "upgrade_token"):
+    if not _table_exists(db, "app_settings"):
+        return
+    needs_token = not _column_exists(db, "app_settings", "upgrade_token")
+    needs_base = not _column_exists(db, "app_settings", "evalex_base")
+    if not needs_token and not needs_base:
         return
     try:
-        db.execute(text("ALTER TABLE app_settings ADD COLUMN upgrade_token VARCHAR(255)"))
-        db.execute(text(
-            "ALTER TABLE app_settings ADD COLUMN evalex_base VARCHAR(255) DEFAULT 'https://evalex.duckdns.org'"
-        ))
+        if needs_token:
+            db.execute(text("ALTER TABLE app_settings ADD COLUMN upgrade_token VARCHAR(255)"))
+        if needs_base:
+            db.execute(text(
+                "ALTER TABLE app_settings ADD COLUMN evalex_base VARCHAR(255) DEFAULT 'https://evalex.duckdns.org'"
+            ))
         db.commit()
     except Exception:
         db.rollback()
+        logger.exception("migrate_add_upgrade_columns failed")
         raise
 
 
 def migrate_add_ip_whitelist_and_port(db: Session) -> None:
     """Add allowed_ips_json and server_port columns to app_settings table if they don't exist."""
+    if not _table_exists(db, "app_settings"):
+        return
     needs_ips = not _column_exists(db, "app_settings", "allowed_ips_json")
     needs_port = not _column_exists(db, "app_settings", "server_port")
     if not needs_ips and not needs_port:
@@ -38,11 +61,14 @@ def migrate_add_ip_whitelist_and_port(db: Session) -> None:
         db.commit()
     except Exception:
         db.rollback()
+        logger.exception("migrate_add_ip_whitelist_and_port failed")
         raise
 
 
 def migrate_add_profile_color(db: Session) -> None:
     """Add color column to profiles table if it doesn't exist (pre-v0.1.27 DBs)."""
+    if not _table_exists(db, "profiles"):
+        return
     if _column_exists(db, "profiles", "color"):
         db.execute(text("UPDATE profiles SET color = '#38bdf8' WHERE color IS NULL OR color = ''"))
         db.commit()
@@ -53,4 +79,5 @@ def migrate_add_profile_color(db: Session) -> None:
         db.commit()
     except Exception:
         db.rollback()
+        logger.exception("migrate_add_profile_color failed")
         raise

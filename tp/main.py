@@ -15,6 +15,7 @@ from . import APP_DIR
 from .action_runner import ActionRunError, configure_notifiers, run_scheduled_action, start_notifiers, stop_notifiers
 from .calendar import expand_calendar
 from .db import get_db, init_db
+from .log_config import configure_logging
 from .ip_filter import IPWhitelistMiddleware, validate_ip_or_cidr
 from .models import ExecutionRun, Profile, ScheduledAction
 from .schemas import (
@@ -29,7 +30,14 @@ from .schemas import (
     SettingsUpdate,
 )
 from .scheduler import scheduler_loop
-from .settings_store import load_mqtt_telegram, settings_to_api, update_settings, get_evalex_base, get_allowed_ips
+from .settings_store import (
+    load_mqtt_telegram,
+    settings_to_api,
+    update_settings,
+    get_evalex_base,
+    get_allowed_ips,
+    get_upgrade_token,
+)
 from .updater import check_for_update, start_upgrade
 
 logger = logging.getLogger("taskplanner.main")
@@ -62,7 +70,7 @@ def _ensure_notification_id(config: dict) -> dict:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global _scheduler_task, _ip_middleware
-    logging.basicConfig(level=logging.INFO)
+    configure_logging()
     init_db()
     logger.info("TaskPlanner starting")
 
@@ -426,8 +434,32 @@ def get_calendar(
     profile_id: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    events = expand_calendar(db, from_date, to_date, profile_id)
-    return [e.model_dump(mode="json") for e in events]
+    logger.info(
+        "GET /api/calendar from=%s to=%s profile_id=%s",
+        from_date,
+        to_date,
+        profile_id or "(all)",
+    )
+    try:
+        events = expand_calendar(db, from_date, to_date, profile_id)
+        payload = [e.model_dump(mode="json") for e in events]
+        logger.info(
+            "GET /api/calendar ok events=%d profile_id=%s",
+            len(payload),
+            profile_id or "(all)",
+        )
+        return payload
+    except Exception as exc:
+        logger.exception(
+            "GET /api/calendar failed from=%s to=%s profile_id=%s",
+            from_date,
+            to_date,
+            profile_id or "(all)",
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Calendar error: {type(exc).__name__}: {exc}",
+        ) from exc
 
 
 @app.get("/api/executions", response_model=list[ExecutionOut])
@@ -451,32 +483,29 @@ def list_executions(
 # --- Update ---
 
 @app.post("/api/update/check")
-def check_update(body: dict, db: Session = Depends(get_db)):
-    token = body.get("token", "").strip()
-    
+def check_update(body: dict = Body(default={}), db: Session = Depends(get_db)):
+    token = (body.get("token") or get_upgrade_token(db)).strip()
     if not token:
-        raise HTTPException(400, "token is required")
-    
+        return {"error": "Please enter a Download Token and try again."}
+
     evalex_base = get_evalex_base(db)
-    result = check_for_update(token, evalex_base)
-    if "error" in result:
-        raise HTTPException(400, result["error"])
-    
-    return result
+    return check_for_update(token, evalex_base)
 
 
 @app.post("/api/update/install")
-def install_update(body: dict, db: Session = Depends(get_db)):
-    token = body.get("token", "").strip()
-    
+def install_update(body: dict = Body(default={}), db: Session = Depends(get_db)):
+    token = (body.get("token") or get_upgrade_token(db)).strip()
     if not token:
-        raise HTTPException(400, "token is required")
-    
+        return JSONResponse(
+            {"error": "Please enter a Download Token and try again."},
+            status_code=400,
+        )
+
     evalex_base = get_evalex_base(db)
     result = start_upgrade(token, evalex_base)
     if "error" in result:
-        raise HTTPException(500, result["error"])
-    
+        return JSONResponse({"error": result["error"]}, status_code=500)
+
     return JSONResponse(result, status_code=202)
 
 

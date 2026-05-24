@@ -15,8 +15,18 @@ export function getApiBase(): string {
 
 async function json<T>(resp: Response): Promise<T> {
   if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ error: resp.statusText }));
-    throw new Error((err as { error?: string }).error || resp.statusText);
+    const body = (await resp.json().catch(() => ({}))) as {
+      error?: string;
+      detail?: string | Array<{ msg?: string }>;
+    };
+    let message = body.error;
+    if (!message && body.detail) {
+      message =
+        typeof body.detail === 'string'
+          ? body.detail
+          : body.detail.map((d) => d.msg).filter(Boolean).join('; ');
+    }
+    throw new Error(message || resp.statusText);
   }
   return resp.json() as Promise<T>;
 }

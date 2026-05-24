@@ -74,6 +74,12 @@ def get_evalex_base(db: Session) -> str:
     return row.evalex_base or "https://evalex.duckdns.org"
 
 
+def get_upgrade_token(db: Session) -> str:
+    """Get the saved download token from settings."""
+    row = get_or_create_settings(db)
+    return (row.upgrade_token or "").strip()
+
+
 def get_allowed_ips(db: Session) -> list[str]:
     """Get the list of allowed IPs from settings."""
     row = get_or_create_settings(db)
