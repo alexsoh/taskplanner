@@ -162,10 +162,11 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
     const [discovering, setDiscovering] = useState(false);
     const [discoveryError, setDiscoveryError] = useState<string | null>(null);
     const [discoveredCameras, setDiscoveredCameras] = useState<Array<{ id: string; name: string }>>([]);
+    const [camerasExpanded, setCamerasExpanded] = useState(false);
     const selectedIds = savedCameraIds(config);
     const cameraLabels = savedCameraLabels(config);
 
-    const handleDiscover = useCallback(async () => {
+    const handleDiscover = useCallback(async (expandOnSuccess = false) => {
       const app = String(configRef.current.app ?? 'vizmux');
       const serverAddress = String(configRef.current.serverAddress ?? '').trim();
 
@@ -183,6 +184,8 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
         setDiscoveredCameras(result.cameras);
         if (result.cameras.length === 0) {
           setDiscoveryError('No cameras found');
+        } else if (expandOnSuccess) {
+          setCamerasExpanded(true);
         }
       } catch (err) {
         setDiscoveryError(
@@ -274,6 +277,7 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
                 onChange({ ...configRef.current, app: e.target.value, cameraIds: [], cameraLabels: {} });
                 setDiscoveredCameras([]);
                 setDiscoveryError(null);
+                setCamerasExpanded(false);
               }}
             >
               <option value="vizmux">VizMux</option>
@@ -295,23 +299,37 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
         </div>
         <div className="space-y-2 text-sm">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-text-muted shrink-0">Cameras</span>
-            {selectedCsv ? (
-              <span className="text-sm truncate min-w-0 flex-1">{selectedCsv}</span>
-            ) : (
-              <span className="flex-1" />
-            )}
+            <button
+              type="button"
+              disabled={discoveredCameras.length === 0 && !discovering}
+              onClick={() => setCamerasExpanded((open) => !open)}
+              className="flex items-center gap-1.5 min-w-0 flex-1 text-left disabled:cursor-default"
+              title={camerasExpanded ? 'Hide camera list' : 'Show camera list'}
+            >
+              <span className="text-text-muted shrink-0 w-3">{camerasExpanded ? '▾' : '▸'}</span>
+              <span className="text-text-muted shrink-0">Cameras</span>
+              {selectedIds.length > 0 ? (
+                <span className="text-xs text-text-muted shrink-0">({selectedIds.length})</span>
+              ) : null}
+              {!camerasExpanded && selectedCsv ? (
+                <span className="text-sm truncate min-w-0">{selectedCsv}</span>
+              ) : !camerasExpanded && discoveredCameras.length > 0 ? (
+                <span className="text-xs text-text-muted truncate min-w-0">
+                  {discoveredCameras.length} available — click to select
+                </span>
+              ) : null}
+            </button>
             <button
               type="button"
               disabled={discovering || !String(config.serverAddress ?? '').trim()}
-              onClick={() => void handleDiscover()}
+              onClick={() => void handleDiscover(true)}
               className="shrink-0 text-xs px-2 py-1 bg-bg-secondary border border-border rounded hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {discovering ? 'Discovering...' : 'Discover'}
             </button>
           </div>
           {discoveryError ? <p className="text-xs text-error">{discoveryError}</p> : null}
-          {discoveredCameras.length > 0 ? (
+          {camerasExpanded && discoveredCameras.length > 0 ? (
             <div className="border border-border rounded p-2 bg-bg-tertiary space-y-1 max-h-48 overflow-y-auto">
               {discoveredCameras.map((cam) => {
                 const isSelected = selectedIds.includes(cam.id);

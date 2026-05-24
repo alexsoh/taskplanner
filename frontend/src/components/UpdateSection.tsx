@@ -7,6 +7,24 @@ interface UpdateSectionProps {
   onTokenChange?: (token: string) => void;
 }
 
+function parseVersion(v: string): number[] {
+  return v
+    .replace(/^v/i, '')
+    .split('.')
+    .map((part) => parseInt(part, 10) || 0);
+}
+
+function versionGreater(a: string, b: string): boolean {
+  const av = parseVersion(a);
+  const bv = parseVersion(b);
+  const len = Math.max(av.length, bv.length);
+  for (let i = 0; i < len; i += 1) {
+    const diff = (av[i] ?? 0) - (bv[i] ?? 0);
+    if (diff !== 0) return diff > 0;
+  }
+  return false;
+}
+
 export function UpdateSection({
   upgradeToken = '',
   onTokenChange,
@@ -45,10 +63,24 @@ export function UpdateSection({
 
       try {
         const ver = await api.getVersion();
-        if (checkResult && ver.version > checkResult.currentVersion) {
-          setStatusMsg('Update completed successfully');
-          setInstalling(false);
+        const baseline = checkResult?.currentVersion;
+        if (baseline && versionGreater(ver.version, baseline)) {
           clearInterval(pollTimer);
+          setInstalling(false);
+          setCheckResult((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  currentVersion: ver.version,
+                  updateAvailable: false,
+                }
+              : prev,
+          );
+          setStatusMsg('Update completed successfully. Refreshing…');
+          window.dispatchEvent(
+            new CustomEvent('taskplanner:version-updated', { detail: { version: ver.version } }),
+          );
+          window.setTimeout(() => window.location.reload(), 1200);
         }
       } catch {
         // Server may be down during upgrade, continue polling

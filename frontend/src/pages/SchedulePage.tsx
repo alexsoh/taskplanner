@@ -4,6 +4,7 @@ import NotificationForm from '../components/NotificationForm.tsx';
 import WeeklyCalendar from '../components/WeeklyCalendar.tsx';
 import type { CalendarEvent, NotificationChannel, Profile, ScheduledAction } from '../types.ts';
 import { CHANNEL_COLORS, DAY_NAMES, defaultNotificationForChannel } from '../utils/notifications.ts';
+import { browserTimezone, formatProfileTimezone } from '../utils/timezone.ts';
 
 type Props = {
   profiles: Profile[];
@@ -41,6 +42,9 @@ export default function SchedulePage({
   const [error, setError] = useState('');
 
   const profile = profiles.find((p) => p.id === selectedId) ?? null;
+  const profileTimezoneLabel = profile ? formatProfileTimezone(profile.timezone) : '';
+  const browserTz = browserTimezone();
+  const timezoneDiffersFromBrowser = profile ? browserTz !== profile.timezone : false;
 
   const load = useCallback(async () => {
     if (!profile) return;
@@ -144,6 +148,16 @@ export default function SchedulePage({
             View execution history →
           </button>
         </div>
+        <div className="rounded-lg border border-border bg-bg-secondary px-3 py-2 text-sm">
+          <span className="text-text-muted">Schedule timezone: </span>
+          <span className="font-medium text-text-primary">{profileTimezoneLabel}</span>
+          {timezoneDiffersFromBrowser && (
+            <span className="text-text-muted">
+              {' '}
+              — your browser is {formatProfileTimezone(browserTz)}; times below are not in your local timezone.
+            </span>
+          )}
+        </div>
       </div>
 
       {error && <p className="text-sm text-error">{error}</p>}
@@ -171,7 +185,7 @@ export default function SchedulePage({
         </div>
       </div>
 
-      <WeeklyCalendar events={events} weekStart={weekStart} />
+      <WeeklyCalendar events={events} weekStart={weekStart} timezoneLabel={profileTimezoneLabel} />
 
       <div className="flex flex-wrap gap-2">
         {(['evalex', 'mqtt', 'telegram', 'http', 'script', 'nvr'] as NotificationChannel[]).map((ch) => (
@@ -214,7 +228,10 @@ export default function SchedulePage({
               </select>
             </label>
             <label className="text-sm space-y-1">
-              Time
+              <span>
+                Time{' '}
+                <span className="text-xs text-text-muted">({profileTimezoneLabel})</span>
+              </span>
               <input
                 type="time"
                 className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded text-sm"
@@ -269,7 +286,10 @@ export default function SchedulePage({
       )}
 
       <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wide">All actions</h3>
+        <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wide">
+          All actions
+          <span className="normal-case font-normal text-text-muted ml-2">({profileTimezoneLabel})</span>
+        </h3>
         {actions.length === 0 ? (
           <p className="text-sm text-text-muted">No scheduled actions yet.</p>
         ) : (

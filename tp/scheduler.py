@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +10,7 @@ from .action_runner import ActionRunError, configure_notifiers, run_scheduled_ac
 from .db import SessionLocal
 from .models import ExecutionRun, Profile, ScheduledAction
 from .settings_store import load_mqtt_telegram
+from .tzutil import profile_timezone
 
 logger = logging.getLogger("taskplanner.scheduler")
 
@@ -41,10 +41,7 @@ def find_due_actions(db: Session, now_utc: datetime | None = None) -> list[tuple
     )
 
     for action, profile in rows:
-        try:
-            tz = ZoneInfo(profile.timezone or "UTC")
-        except Exception:
-            tz = ZoneInfo("UTC")
+        tz = profile_timezone(profile.timezone)
         local = now_utc.astimezone(tz)
         if local.weekday() != action.day_of_week:
             continue

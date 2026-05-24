@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, time, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
 from .models import Profile, ScheduledAction
 from .schemas import CalendarEvent
+from .tzutil import profile_timezone
 
 logger = logging.getLogger("taskplanner.calendar")
 
@@ -70,15 +70,7 @@ def expand_calendar(
                     action.time,
                 )
                 continue
-            try:
-                tz = ZoneInfo(profile.timezone or "UTC")
-            except Exception:
-                logger.warning(
-                    "calendar bad timezone=%r profile=%s; using UTC",
-                    profile.timezone,
-                    profile.id,
-                )
-                tz = ZoneInfo("UTC")
+            tz = profile_timezone(profile.timezone)
             local_dt = datetime.combine(cur, action_time, tzinfo=tz)
             occurrence_utc = local_dt.astimezone(timezone.utc)
             events.append(

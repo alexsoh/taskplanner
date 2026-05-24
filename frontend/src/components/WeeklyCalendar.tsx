@@ -4,6 +4,7 @@ import { CHANNEL_COLORS, DAY_NAMES } from '../utils/notifications.ts';
 type Props = {
   events: CalendarEvent[];
   weekStart: Date;
+  timezoneLabel?: string;
 };
 
 function timeToMins(hhmm: string): number {
@@ -11,7 +12,7 @@ function timeToMins(hhmm: string): number {
   return (h ?? 0) * 60 + (m ?? 0);
 }
 
-export default function WeeklyCalendar({ events, weekStart }: Props) {
+export default function WeeklyCalendar({ events, weekStart, timezoneLabel }: Props) {
   const days: Date[] = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(weekStart);
@@ -31,7 +32,11 @@ export default function WeeklyCalendar({ events, weekStart }: Props) {
   }
 
   return (
-    <div className="grid grid-cols-7 gap-2 min-h-[280px]">
+    <div className="space-y-1">
+      {timezoneLabel && (
+        <p className="text-xs text-text-muted">Calendar times shown in {timezoneLabel}</p>
+      )}
+      <div className="grid grid-cols-7 gap-2 min-h-[280px]">
       {days.map((day, i) => (
         <div key={i} className="flex flex-col border border-border rounded-lg overflow-hidden bg-bg-secondary">
           <div className="px-2 py-1.5 text-xs font-semibold text-text-secondary border-b border-border bg-bg-tertiary">
@@ -57,6 +62,7 @@ export default function WeeklyCalendar({ events, weekStart }: Props) {
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }

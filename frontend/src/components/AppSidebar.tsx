@@ -19,7 +19,12 @@ export default function AppSidebar({ tab, onTabChange }: Props) {
   const [appVersion, setAppVersion] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getVersion().then(r => setAppVersion(r.version)).catch(() => {});
+    const refreshVersion = () => {
+      api.getVersion().then((r) => setAppVersion(r.version)).catch(() => {});
+    };
+    refreshVersion();
+    window.addEventListener('taskplanner:version-updated', refreshVersion);
+    return () => window.removeEventListener('taskplanner:version-updated', refreshVersion);
   }, []);
 
   return (
