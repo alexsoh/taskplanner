@@ -288,6 +288,22 @@ export default function SchedulePage({
                 {!a.enabled && <span className="text-xs text-text-muted">off</span>}
                 <button
                   type="button"
+                  className="text-xs text-text-muted hover:text-text-primary transition-colors"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      await api.copyAction(a.id);
+                      load();
+                    } catch (err) {
+                      setError(`Failed to copy action: ${err}`);
+                    }
+                  }}
+                  title="Copy action"
+                >
+                  Copy
+                </button>
+                <button
+                  type="button"
                   className="text-xs text-error"
                   onClick={async (e) => {
                     e.stopPropagation();

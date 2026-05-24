@@ -305,6 +305,27 @@ def delete_action(action_id: str, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+@app.post("/api/actions/{action_id}/copy")
+def copy_action(action_id: str, db: Session = Depends(get_db)):
+    a = db.get(ScheduledAction, action_id)
+    if not a:
+        raise HTTPException(404, "Action not found")
+    
+    new_action = ScheduledAction(
+        profile_id=a.profile_id,
+        label=f"{a.label} (Copy)",
+        day_of_week=a.day_of_week,
+        time=a.time,
+        channel=a.channel,
+        enabled=a.enabled,
+        notification_config=a.notification_config,
+    )
+    db.add(new_action)
+    db.commit()
+    db.refresh(new_action)
+    return new_action
+
+
 @app.post("/api/actions/{action_id}/test")
 async def test_action(action_id: str, db: Session = Depends(get_db)):
     a = db.get(ScheduledAction, action_id)

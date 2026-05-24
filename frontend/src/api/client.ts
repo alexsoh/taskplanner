@@ -105,6 +105,15 @@ export async function testAction(id: string): Promise<{ status: string; message?
   return json(resp);
 }
 
+export async function copyAction(id: string): Promise<ScheduledAction> {
+  return json(
+    await fetch(`${getApiBase()}/api/actions/${id}/copy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
+}
+
 export async function getCalendar(from: string, to: string, profileId?: string): Promise<CalendarEvent[]> {
   const q = new URLSearchParams({ from, to });
   if (profileId) q.set('profile_id', profileId);
