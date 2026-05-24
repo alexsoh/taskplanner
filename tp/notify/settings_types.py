@@ -50,6 +50,8 @@ class MqttSettings:
     listenerTopicPrefix: str = "piyoai/listen"
     commandListenerEnabled: bool = False
     commandListenerTopicPrefix: str = "piyoai/command"
+    profileListenerEnabled: bool = False
+    profileListenerTopicPrefix: str = "taskplanner/profile"
 
 
 @dataclass

@@ -31,10 +31,31 @@ _mqtt_settings: Optional[MqttSettings] = None
 _telegram_settings: Optional[TelegramSettings] = None
 
 
+def _set_profile_enabled_sync(profile_id: str, enabled: bool) -> None:
+    from .db import SessionLocal
+    db = SessionLocal()
+    try:
+        p = db.get(Profile, profile_id)
+        if not p:
+            logger.warning("Profile listener: profile not found: %s", profile_id)
+            return
+        if enabled:
+            db.query(Profile).filter(Profile.id != profile_id).update({"enabled": False})
+        p.enabled = enabled
+        db.commit()
+        logger.info("Profile listener: %s profile '%s'", "enabled" if enabled else "disabled", p.name)
+    except Exception:
+        db.rollback()
+        logger.error("Profile listener: failed to update profile %s", profile_id, exc_info=True)
+    finally:
+        db.close()
+
+
 def configure_notifiers(mqtt_settings: MqttSettings, telegram_settings: TelegramSettings) -> None:
     global _mqtt_settings, _telegram_settings
     _mqtt_settings = mqtt_settings
     _telegram_settings = telegram_settings
+    mqtt.set_profile_callbacks(_set_profile_enabled_sync)
     if mqtt_settings.enabled:
         mqtt.connect(mqtt_settings)
     else:

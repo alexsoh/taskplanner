@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import * as api from '../api/client.ts';
 import NotificationForm from '../components/NotificationForm.tsx';
 import WeeklyCalendar from '../components/WeeklyCalendar.tsx';
-import type { CalendarEvent, NotificationChannel, Profile, ScheduledAction } from '../types.ts';
+import type { AppSettings, CalendarEvent, NotificationChannel, Profile, ScheduledAction } from '../types.ts';
 import { CHANNEL_COLORS, DAY_NAMES, defaultNotificationForChannel } from '../utils/notifications.ts';
 import { browserTimezone, formatProfileTimezone } from '../utils/timezone.ts';
 
@@ -41,6 +41,11 @@ export default function SchedulePage({
   const [testMsg, setTestMsg] = useState('');
   const [error, setError] = useState('');
   const [daysExpanded, setDaysExpanded] = useState(false);
+  const [mqttSettings, setMqttSettings] = useState<AppSettings['mqtt'] | null>(null);
+
+  useEffect(() => {
+    api.getSettings().then((s) => setMqttSettings(s.mqtt)).catch(() => {});
+  }, []);
 
   const profile = profiles.find((p) => p.id === selectedId) ?? null;
   const profileTimezoneLabel = profile ? formatProfileTimezone(profile.timezone) : '';
@@ -161,6 +166,21 @@ export default function SchedulePage({
             </span>
           )}
         </div>
+        {mqttSettings?.profileListenerEnabled && profile && (
+          <div className="rounded-lg border border-border bg-bg-secondary px-3 py-2 text-sm space-y-1">
+            <span className="text-text-muted">MQTT profile control topics:</span>
+            <div className="font-mono text-xs space-y-0.5 mt-1">
+              <div>
+                <span className="text-text-muted">enable:{'  '}</span>
+                <span className="text-text-primary">{mqttSettings.profileListenerTopicPrefix}/{profile.id}/cmd/enable</span>
+              </div>
+              <div>
+                <span className="text-text-muted">disable: </span>
+                <span className="text-text-primary">{mqttSettings.profileListenerTopicPrefix}/{profile.id}/cmd/disable</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {error && <p className="text-sm text-error">{error}</p>}

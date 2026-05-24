@@ -191,6 +191,8 @@ def update_profile(profile_id: str, body: ProfileUpdate, db: Session = Depends(g
     p = db.get(Profile, profile_id)
     if not p:
         raise HTTPException(404, "Profile not found")
+    if body.enabled is True:
+        db.query(Profile).filter(Profile.id != profile_id).update({"enabled": False})
     for field, val in body.model_dump(exclude_unset=True).items():
         setattr(p, field, val)
     db.commit()
@@ -214,12 +216,15 @@ def copy_profile(profile_id: str, body: ProfileUpdate, db: Session = Depends(get
     if not source:
         raise HTTPException(404, "Profile not found")
 
+    new_enabled = body.enabled if body.enabled is not None else source.enabled
     new_profile = Profile(
         name=body.name if body.name is not None else source.name,
         timezone=body.timezone if body.timezone is not None else source.timezone,
-        enabled=body.enabled if body.enabled is not None else source.enabled,
+        enabled=new_enabled,
         color=body.color if body.color is not None else source.color,
     )
+    if new_enabled:
+        db.query(Profile).update({"enabled": False})
     db.add(new_profile)
     db.flush()
     

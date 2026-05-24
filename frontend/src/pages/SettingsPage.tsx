@@ -275,6 +275,28 @@ export default function SettingsPage() {
                 />
               </label>
             </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={mqtt.profileListenerEnabled}
+                onChange={(e) =>
+                  setSettings({ ...settings, mqtt: { ...mqtt, profileListenerEnabled: e.target.checked } })
+                }
+              />
+              Enable profile listener (enable/disable profiles via MQTT)
+            </label>
+            {mqtt.profileListenerEnabled && (
+              <label className="block text-sm space-y-1">
+                Profile listener topic prefix
+                <input
+                  className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded text-sm"
+                  value={mqtt.profileListenerTopicPrefix}
+                  onChange={(e) =>
+                    setSettings({ ...settings, mqtt: { ...mqtt, profileListenerTopicPrefix: e.target.value } })
+                  }
+                />
+              </label>
+            )}
           </section>
 
           <section className="space-y-3 p-4 border border-border rounded-lg bg-bg-secondary">

@@ -60,7 +60,7 @@ def settings_to_api(db: Session) -> dict[str, Any]:
     row = get_or_create_settings(db)
     allowed_ips_data = row.allowed_ips_json or _default_allowed_ips()
     return {
-        "mqtt": row.mqtt_json or _default_mqtt(),
+        "mqtt": {**_default_mqtt(), **(row.mqtt_json or {})},
         "telegram": row.telegram_json or _default_telegram(),
         "upgradeToken": row.upgrade_token,
         "allowedIps": allowed_ips_data.get("allowedIps", ["127.0.0.1", "::1"]),

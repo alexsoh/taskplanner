@@ -44,6 +44,9 @@ class MqttClient:
         self._cmd_resume: Callable[[list[str]], list[str]] | None = None
         self._cmd_set_enabled: Callable[[list[str], bool], list[str]] | None = None
         self._cmd_resolve: Callable[[str], list[str]] | None = None
+        self._profile_listener_enabled = False
+        self._profile_listener_topic_prefix = ""
+        self._profile_set_enabled: Callable[[str, bool], None] | None = None
 
     def set_image_callback(
         self,
@@ -52,6 +55,9 @@ class MqttClient:
     ) -> None:
         self._image_callback = callback
         self._loop = loop
+
+    def set_profile_callbacks(self, set_enabled_fn: Callable[[str, bool], None]) -> None:
+        self._profile_set_enabled = set_enabled_fn
 
     def set_command_callbacks(
         self,
@@ -79,6 +85,8 @@ class MqttClient:
         self._subscribe_qos = max(0, min(2, int(settings.subscribeQos)))
         self._cmd_listener_enabled = settings.commandListenerEnabled
         self._cmd_listener_topic_prefix = settings.commandListenerTopicPrefix.rstrip("/")
+        self._profile_listener_enabled = settings.profileListenerEnabled
+        self._profile_listener_topic_prefix = settings.profileListenerTopicPrefix.rstrip("/")
 
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         if settings.username:
@@ -150,6 +158,10 @@ class MqttClient:
             topic = f"{self._cmd_listener_topic_prefix}/+/cmd/+"
             c.subscribe(topic, qos=self._subscribe_qos)
             logger.info("Subscribed to MQTT command listener: %s", topic)
+        if self._profile_listener_enabled and self._profile_listener_topic_prefix:
+            topic = f"{self._profile_listener_topic_prefix}/+/cmd/+"
+            c.subscribe(topic, qos=self._subscribe_qos)
+            logger.info("Subscribed to MQTT profile listener: %s", topic)
 
     def _on_message(self, _client: mqtt.Client, _userdata: object, msg: mqtt.MQTTMessage) -> None:
         from ._stubs import IS_DEMO, demo_server_expired, grace_expired, activation_required
@@ -157,6 +169,13 @@ class MqttClient:
             return
         if IS_DEMO and demo_server_expired:
             return
+
+        # Route to profile listener (prefix/profile_id/cmd/action)
+        if self._profile_listener_enabled and self._profile_listener_topic_prefix:
+            prof_prefix = self._profile_listener_topic_prefix + "/"
+            if msg.topic.startswith(prof_prefix) and "/cmd/" in msg.topic:
+                self._handle_profile_command_message(msg.topic[len(prof_prefix):])
+                return
 
         # Route to command listener (prefix/camera_id/cmd/action)
         if self._cmd_listener_enabled and self._cmd_listener_topic_prefix:
@@ -192,6 +211,21 @@ class MqttClient:
             self._image_callback(camera_name, str(temp_path)),
             self._loop,
         )
+
+    def _handle_profile_command_message(self, remainder: str) -> None:
+        """Parse and execute a profile command topic: <profile_id>/cmd/<enable|disable>."""
+        parts = remainder.split("/")
+        if len(parts) != 3 or parts[1] != "cmd":
+            logger.debug("Profile listener: ignoring unrecognized topic '%s'", remainder)
+            return
+        profile_id, _, action = parts
+        if action not in ("enable", "disable"):
+            logger.debug("Profile listener: unknown action '%s'", action)
+            return
+        enabled = action == "enable"
+        if self._profile_set_enabled and self._loop:
+            self._loop.call_soon_threadsafe(self._profile_set_enabled, profile_id, enabled)
+            logger.info("Profile listener: %s profile %s", action, profile_id)
 
     def _handle_command_message(self, remainder: str, payload: bytes) -> None:
         """Parse and execute a command topic: <camera_id>/cmd/<action>."""

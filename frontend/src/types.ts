@@ -14,6 +14,8 @@ export interface MqttSettings {
   listenerTopicPrefix: string;
   commandListenerEnabled: boolean;
   commandListenerTopicPrefix: string;
+  profileListenerEnabled: boolean;
+  profileListenerTopicPrefix: string;
 }
 
 export interface MqttNotification {
