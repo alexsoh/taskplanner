@@ -35,6 +35,17 @@ def parse_notification(channel: str, config: dict[str, Any]):
     if channel == "nvr":
         items = _parse_nvr_notifications([config]) if config else []
         return items[0] if items else NvrNotification()
+    if channel == "evalex":
+        obj = EvalexNotification()
+        for k, v in (config or {}).items():
+            if k == "cameraIds":
+                if isinstance(v, list):
+                    obj.cameraIds = [str(item).strip() for item in v if str(item).strip()]
+                elif v:
+                    obj.cameraIds = [str(v).strip()]
+            elif hasattr(obj, k):
+                setattr(obj, k, v)
+        return obj
     obj = cls()
     for k, v in (config or {}).items():
         if hasattr(obj, k):

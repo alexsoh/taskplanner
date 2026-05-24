@@ -93,6 +93,7 @@ export function newEvalexNotification(): EvalexNotification {
     app: 'vizmux',
     serverAddress: '',
     cameraIds: [],
+    cameraLabels: {},
     action: 'enable',
   };
 }

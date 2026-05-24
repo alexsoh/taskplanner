@@ -28,3 +28,12 @@ def migrate_add_ip_whitelist_and_port(db: Session) -> None:
         db.execute(text("ALTER TABLE app_settings ADD COLUMN allowed_ips_json JSON DEFAULT '{\"allowedIps\": [\"127.0.0.1\", \"::1\"]}'"))
         db.execute(text("ALTER TABLE app_settings ADD COLUMN server_port INTEGER DEFAULT 8200"))
         db.commit()
+
+
+def migrate_add_profile_color(db: Session) -> None:
+    """Add color column to profiles table if it doesn't exist (pre-v0.1.27 DBs)."""
+    try:
+        db.execute(text("SELECT color FROM profiles LIMIT 1"))
+    except Exception:
+        db.execute(text("ALTER TABLE profiles ADD COLUMN color VARCHAR(16) DEFAULT '#38bdf8'"))
+        db.commit()

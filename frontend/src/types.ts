@@ -105,6 +105,7 @@ export interface EvalexNotification {
   app: EvalexApp;
   serverAddress: string;
   cameraIds: string[];
+  cameraLabels?: Record<string, string>;
   action: EvalexAction;
 }
 

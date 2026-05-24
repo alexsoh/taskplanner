@@ -230,7 +230,7 @@ export default function SchedulePage({
           <NotificationForm
             channel={draft.channel}
             config={draft.notification_config}
-            onChange={(c) => setDraft({ ...draft, notification_config: c })}
+            onChange={(c) => setDraft((prev) => (prev ? { ...prev, notification_config: c } : prev))}
           />
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={save} className="px-4 py-2 bg-accent text-bg-primary rounded text-sm">

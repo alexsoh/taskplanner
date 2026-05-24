@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as api from '../api/client.ts';
 import type { NotificationChannel } from '../types.ts';
 
@@ -27,8 +27,31 @@ function Field({
 const inputCls =
   'w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded text-sm focus:outline-none focus:border-border-focus';
 
+function savedCameraIds(config: Record<string, unknown>): string[] {
+  if (!Array.isArray(config.cameraIds)) return [];
+  return config.cameraIds.map((id) => String(id).trim()).filter(Boolean);
+}
+
+function savedCameraLabels(config: Record<string, unknown>): Record<string, string> {
+  const raw = config.cameraLabels;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>)
+      .map(([id, name]) => [id.trim(), String(name).trim()] as const)
+      .filter(([id, name]) => id && name),
+  );
+}
+
+function formatCameraLabel(id: string, name: string): string {
+  const trimmed = name.trim();
+  if (trimmed && trimmed !== id) return trimmed;
+  return 'Unnamed camera';
+}
+
 export default function NotificationForm({ channel, config, onChange }: Props) {
-  const set = (k: string, v: unknown) => onChange({ ...config, [k]: v });
+  const configRef = useRef(config);
+  configRef.current = config;
+  const set = (k: string, v: unknown) => onChange({ ...configRef.current, [k]: v });
 
   if (channel === 'mqtt') {
     return (
@@ -139,10 +162,12 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
     const [discovering, setDiscovering] = useState(false);
     const [discoveryError, setDiscoveryError] = useState<string | null>(null);
     const [discoveredCameras, setDiscoveredCameras] = useState<Array<{ id: string; name: string }>>([]);
+    const selectedIds = savedCameraIds(config);
+    const cameraLabels = savedCameraLabels(config);
 
-    const handleDiscover = async () => {
-      const app = String(config.app ?? 'vizmux');
-      const serverAddress = String(config.serverAddress ?? '');
+    const handleDiscover = useCallback(async () => {
+      const app = String(configRef.current.app ?? 'vizmux');
+      const serverAddress = String(configRef.current.serverAddress ?? '');
 
       if (!serverAddress.trim()) {
         setDiscoveryError('Server address is required');
@@ -166,6 +191,60 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
       } finally {
         setDiscovering(false);
       }
+    }, []);
+
+    useEffect(() => {
+      if (selectedIds.length === 0) return;
+      const serverAddress = String(config.serverAddress ?? '').trim();
+      if (!serverAddress || discovering || discoveredCameras.length > 0) return;
+      void handleDiscover();
+    }, [config.serverAddress, discoveredCameras.length, discovering, handleDiscover, selectedIds.length]);
+
+    useEffect(() => {
+      if (discoveredCameras.length === 0 || selectedIds.length === 0) return;
+      const labels = savedCameraLabels(configRef.current);
+      let changed = false;
+      const nextLabels = { ...labels };
+      for (const id of selectedIds) {
+        if (nextLabels[id]) continue;
+        const cam = discoveredCameras.find((c) => c.id === id);
+        if (cam?.name && cam.name !== id) {
+          nextLabels[id] = cam.name;
+          changed = true;
+        }
+      }
+      if (changed) {
+        onChange({ ...configRef.current, cameraLabels: nextLabels });
+      }
+    }, [discoveredCameras, onChange, selectedIds]);
+
+    const discoveredNames = useMemo(() => {
+      const names = new Map<string, string>();
+      for (const cam of discoveredCameras) {
+        if (cam.id) names.set(cam.id, cam.name || cam.id);
+      }
+      return names;
+    }, [discoveredCameras]);
+
+    const labelForCamera = (id: string) => cameraLabels[id] || discoveredNames.get(id) || id;
+
+    const toggleCamera = (cameraId: string, checked: boolean, cameraName?: string) => {
+      const current = savedCameraIds(configRef.current);
+      const labels = savedCameraLabels(configRef.current);
+      if (checked) {
+        const nextIds = [...current, cameraId].filter((id, index, all) => all.indexOf(id) === index);
+        const nextLabels = { ...labels };
+        const name = (cameraName || discoveredNames.get(cameraId) || '').trim();
+        if (name && name !== cameraId) {
+          nextLabels[cameraId] = name;
+        }
+        onChange({ ...configRef.current, cameraIds: nextIds, cameraLabels: nextLabels });
+        return;
+      }
+      const nextIds = current.filter((id) => id !== cameraId);
+      const nextLabels = { ...labels };
+      delete nextLabels[cameraId];
+      onChange({ ...configRef.current, cameraIds: nextIds, cameraLabels: nextLabels });
     };
 
     return (
@@ -176,7 +255,7 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
               className={inputCls}
               value={String(config.app ?? 'vizmux')}
               onChange={(e) => {
-                set('app', e.target.value);
+                onChange({ ...configRef.current, app: e.target.value, cameraIds: [], cameraLabels: {} });
                 setDiscoveredCameras([]);
                 setDiscoveryError(null);
               }}
@@ -199,32 +278,59 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
             />
           </Field>
         </div>
-        <div className="space-y-1">
+        <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm">
             <span className="text-text-muted">Cameras</span>
             <button
               type="button"
               disabled={discovering || !String(config.serverAddress ?? '').trim()}
-              onClick={handleDiscover}
+              onClick={() => void handleDiscover()}
               className="text-xs px-2 py-0.5 bg-bg-secondary border border-border rounded hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {discovering ? 'Discovering...' : 'Discover'}
             </button>
           </div>
-          {discoveryError && <p className="text-xs text-text-error">{discoveryError}</p>}
+          {selectedIds.length > 0 && (
+            <div className="border border-accent/30 rounded p-2 bg-bg-tertiary space-y-1">
+              <div className="text-xs font-medium text-text-secondary">Selected cameras</div>
+              <ul className="space-y-1">
+                {selectedIds.map((id) => (
+                  <li
+                    key={id}
+                    className="flex items-center justify-between gap-2 text-sm py-1 px-1 rounded hover:bg-bg-secondary"
+                  >
+                    <span className="truncate">{formatCameraLabel(id, labelForCamera(id))}</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleCamera(id, false)}
+                      className="shrink-0 text-xs text-text-muted hover:text-error"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {discoveryError && <p className="text-xs text-error">{discoveryError}</p>}
           {discoveredCameras.length > 0 && (
-            <select
-              multiple
-              className={inputCls + ' min-h-24'}
-              value={Array.isArray(config.cameraIds) ? config.cameraIds : []}
-              onChange={(e) => set('cameraIds', Array.from(e.currentTarget.selectedOptions, (o) => o.value))}
-            >
-              {discoveredCameras.map((cam) => (
-                <option key={cam.id} value={cam.id}>
-                  {cam.name ? `${cam.name} (${cam.id})` : cam.id}
-                </option>
-              ))}
-            </select>
+            <div className="border border-border rounded p-2 bg-bg-tertiary space-y-2 max-h-48 overflow-y-auto">
+              <div className="text-xs text-text-muted">Available cameras</div>
+              {discoveredCameras.map((cam) => {
+                const isSelected = selectedIds.includes(cam.id);
+                return (
+                  <label key={cam.id} className="flex items-center gap-2 cursor-pointer hover:bg-bg-secondary p-1 rounded transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => toggleCamera(cam.id, e.target.checked, cam.name)}
+                      className="w-4 h-4 accent-accent rounded"
+                    />
+                    <span className="text-sm">{formatCameraLabel(cam.id, cam.name ?? '')}</span>
+                  </label>
+                );
+              })}
+            </div>
           )}
         </div>
         <Field label="Action">
