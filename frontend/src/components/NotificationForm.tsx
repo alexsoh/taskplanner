@@ -203,26 +203,6 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
     }, []);
 
     useEffect(() => {
-      const serverAddress = String(config.serverAddress ?? '').trim();
-      if (!serverAddress) {
-        setDiscoveredCameras([]);
-        setDiscoveryError(null);
-        return;
-      }
-      
-      // Also ensure protocol here for automatic discovery
-      let normalizedAddress = serverAddress;
-      if (!normalizedAddress.startsWith('http://') && !normalizedAddress.startsWith('https://')) {
-        normalizedAddress = `http://${normalizedAddress}`;
-      }
-      
-      const timer = window.setTimeout(() => {
-        void handleDiscover();
-      }, 300);
-      return () => window.clearTimeout(timer);
-    }, [config.app, config.serverAddress, handleDiscover]);
-
-    useEffect(() => {
       if (discoveredCameras.length === 0 || selectedIds.length === 0) return;
       const labels = savedCameraLabels(configRef.current);
       let changed = false;
