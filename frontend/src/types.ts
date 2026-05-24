@@ -131,7 +131,7 @@ export interface ScheduledAction {
   id: string;
   profile_id: string;
   label: string;
-  day_of_week: number;
+  days_of_week: number[];
   time: string;
   channel: NotificationChannel;
   enabled: boolean;

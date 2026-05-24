@@ -246,12 +246,14 @@ def copy_profile(profile_id: str, body: ProfileCreate, db: Session = Depends(get
 def list_actions(profile_id: str, db: Session = Depends(get_db)):
     if not db.get(Profile, profile_id):
         raise HTTPException(404, "Profile not found")
-    return (
+    actions = (
         db.query(ScheduledAction)
         .filter(ScheduledAction.profile_id == profile_id)
-        .order_by(ScheduledAction.day_of_week, ScheduledAction.time)
         .all()
     )
+    # Sort by min(days_of_week), then time
+    actions.sort(key=lambda a: (min(a.days_of_week), a.time))
+    return actions
 
 
 @app.post("/api/profiles/{profile_id}/actions", response_model=ActionOut)
@@ -263,7 +265,7 @@ def create_action(profile_id: str, body: ActionCreate, db: Session = Depends(get
     a = ScheduledAction(
         profile_id=profile_id,
         label=body.label,
-        day_of_week=body.day_of_week,
+        days_of_week=body.days_of_week,
         time=body.time.strip(),
         channel=ch,
         enabled=body.enabled,
@@ -322,7 +324,7 @@ def copy_action(action_id: str, db: Session = Depends(get_db)):
     new_action = ScheduledAction(
         profile_id=a.profile_id,
         label=f"{a.label} (Copy)",
-        day_of_week=a.day_of_week,
+        days_of_week=a.days_of_week,
         time=a.time,
         channel=a.channel,
         enabled=a.enabled,

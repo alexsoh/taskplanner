@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 Channel = Literal["mqtt", "telegram", "http", "script", "nvr", "evalex"]
 
@@ -33,27 +33,51 @@ class ProfileOut(BaseModel):
 
 class ActionCreate(BaseModel):
     label: str = "Action"
-    day_of_week: int = Field(ge=0, le=6)
+    days_of_week: list[int] = Field(default=[0], min_length=1)
     time: str
     channel: Channel
     enabled: bool = True
     notification_config: Dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("days_of_week")
+    @classmethod
+    def validate_days_of_week(cls, v: list[int]) -> list[int]:
+        if not v:
+            raise ValueError("days_of_week must have at least one day")
+        unique_sorted = sorted(set(v))
+        for day in unique_sorted:
+            if not (0 <= day <= 6):
+                raise ValueError(f"day_of_week must be 0-6, got {day}")
+        return unique_sorted
+
 
 class ActionUpdate(BaseModel):
     label: Optional[str] = None
-    day_of_week: Optional[int] = Field(default=None, ge=0, le=6)
+    days_of_week: Optional[list[int]] = Field(default=None, min_length=1)
     time: Optional[str] = None
     channel: Optional[Channel] = None
     enabled: Optional[bool] = None
     notification_config: Optional[Dict[str, Any]] = None
+
+    @field_validator("days_of_week")
+    @classmethod
+    def validate_days_of_week(cls, v: Optional[list[int]]) -> Optional[list[int]]:
+        if v is None:
+            return None
+        if not v:
+            raise ValueError("days_of_week must have at least one day")
+        unique_sorted = sorted(set(v))
+        for day in unique_sorted:
+            if not (0 <= day <= 6):
+                raise ValueError(f"day_of_week must be 0-6, got {day}")
+        return unique_sorted
 
 
 class ActionOut(BaseModel):
     id: str
     profile_id: str
     label: str
-    day_of_week: int
+    days_of_week: list[int]
     time: str
     channel: str
     enabled: bool

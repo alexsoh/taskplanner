@@ -33,13 +33,14 @@ export default function SchedulePage({
   const [editing, setEditing] = useState<ScheduledAction | null>(null);
   const [draft, setDraft] = useState<{
     label: string;
-    day_of_week: number;
+    days_of_week: number[];
     time: string;
     channel: NotificationChannel;
     notification_config: Record<string, unknown>;
   } | null>(null);
   const [testMsg, setTestMsg] = useState('');
   const [error, setError] = useState('');
+  const [daysExpanded, setDaysExpanded] = useState(false);
 
   const profile = profiles.find((p) => p.id === selectedId) ?? null;
   const profileTimezoneLabel = profile ? formatProfileTimezone(profile.timezone) : '';
@@ -77,9 +78,10 @@ export default function SchedulePage({
 
   const startNew = (channel: NotificationChannel) => {
     setEditing(null);
+    setDaysExpanded(false);
     setDraft({
       label: 'New action',
-      day_of_week: 1,
+      days_of_week: [1],
       time: '09:00',
       channel,
       notification_config: defaultNotificationForChannel(channel) as unknown as Record<string, unknown>,
@@ -88,9 +90,10 @@ export default function SchedulePage({
 
   const startEdit = (a: ScheduledAction) => {
     setEditing(a);
+    setDaysExpanded(false);
     setDraft({
       label: a.label,
-      day_of_week: a.day_of_week,
+      days_of_week: a.days_of_week,
       time: a.time,
       channel: a.channel,
       notification_config: { ...a.notification_config },
@@ -215,17 +218,39 @@ export default function SchedulePage({
             </label>
             <label className="text-sm space-y-1">
               Day
-              <select
-                className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded text-sm"
-                value={draft.day_of_week}
-                onChange={(e) => setDraft({ ...draft, day_of_week: parseInt(e.target.value, 10) })}
-              >
-                {DAY_NAMES.map((d, i) => (
-                  <option key={d} value={i}>
-                    {d}
-                  </option>
-                ))}
-              </select>
+              <div className="space-y-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setDaysExpanded((open) => !open)}
+                  className="w-full flex items-center gap-1.5 text-left"
+                  title={daysExpanded ? 'Hide days' : 'Show days'}
+                >
+                  <span className="text-text-muted shrink-0 w-3">{daysExpanded ? '▾' : '▸'}</span>
+                  <span className="text-text-muted text-sm">
+                    {draft.days_of_week.map(d => DAY_NAMES[d]).join(', ')}
+                  </span>
+                </button>
+                {daysExpanded && (
+                  <div className="flex flex-wrap gap-2 border border-border rounded p-2 bg-bg-tertiary">
+                    {DAY_NAMES.map((d, i) => (
+                      <label key={d} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={draft.days_of_week.includes(i)}
+                          onChange={(e) => {
+                            const newDays = e.target.checked
+                              ? [...draft.days_of_week, i].sort((a, b) => a - b)
+                              : draft.days_of_week.filter(day => day !== i);
+                            setDraft({ ...draft, days_of_week: newDays });
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-xs">{d}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
             </label>
             <label className="text-sm space-y-1">
               <span>
@@ -258,6 +283,7 @@ export default function SchedulePage({
               onClick={() => {
                 setDraft(null);
                 setEditing(null);
+                setDaysExpanded(false);
               }}
               className="px-4 py-2 border border-border rounded text-sm"
             >
@@ -301,7 +327,7 @@ export default function SchedulePage({
                 onClick={() => startEdit(a)}
               >
                 <span className="font-mono text-text-muted w-24">
-                  {DAY_NAMES[a.day_of_week]} {a.time}
+                  {a.days_of_week.map(d => DAY_NAMES[d]).join(', ')} {a.time}
                 </span>
                 <span style={{ color: CHANNEL_COLORS[a.channel] }}>{a.channel}</span>
                 <span className="flex-1 truncate">{a.label}</span>

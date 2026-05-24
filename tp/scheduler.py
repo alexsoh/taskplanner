@@ -43,7 +43,7 @@ def find_due_actions(db: Session, now_utc: datetime | None = None) -> list[tuple
     for action, profile in rows:
         tz = profile_timezone(profile.timezone)
         local = now_utc.astimezone(tz)
-        if local.weekday() != action.day_of_week:
+        if local.weekday() not in action.days_of_week:
             continue
         hhmm = local.strftime("%H:%M")
         if hhmm != (action.time or "").strip():

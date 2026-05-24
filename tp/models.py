@@ -47,7 +47,7 @@ class ScheduledAction(Base):
         String(36), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, index=True
     )
     label: Mapped[str] = mapped_column(String(255), nullable=False, default="Action")
-    day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)  # 0=Mon .. 6=Sun
+    days_of_week: Mapped[list] = mapped_column(JSON, nullable=False, default=lambda: [0])  # [0=Mon, 1=Tue, ..., 6=Sun]
     time: Mapped[str] = mapped_column(String(5), nullable=False)  # HH:MM
     channel: Mapped[str] = mapped_column(String(16), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

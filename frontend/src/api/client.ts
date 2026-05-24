@@ -77,7 +77,7 @@ export async function createAction(
   profileId: string,
   body: {
     label: string;
-    day_of_week: number;
+    days_of_week: number[];
     time: string;
     channel: NotificationChannel;
     enabled?: boolean;

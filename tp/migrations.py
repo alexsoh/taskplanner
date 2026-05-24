@@ -81,3 +81,27 @@ def migrate_add_profile_color(db: Session) -> None:
         db.rollback()
         logger.exception("migrate_add_profile_color failed")
         raise
+
+
+def migrate_days_of_week_to_array(db: Session) -> None:
+    """Convert day_of_week int to days_of_week JSON array (multi-day support)."""
+    if not _table_exists(db, "scheduled_actions"):
+        return
+    if _column_exists(db, "scheduled_actions", "days_of_week"):
+        # Already migrated; skip
+        return
+    if not _column_exists(db, "scheduled_actions", "day_of_week"):
+        # No old column; shouldn't happen but skip
+        return
+    try:
+        db.execute(text("ALTER TABLE scheduled_actions ADD COLUMN days_of_week JSON"))
+        db.execute(text("UPDATE scheduled_actions SET days_of_week = json_array(day_of_week)"))
+        # Set days_of_week to [0] for any NULL rows (shouldn't happen, but be safe)
+        db.execute(text("UPDATE scheduled_actions SET days_of_week = json('[0]') WHERE days_of_week IS NULL"))
+        db.commit()
+        logger.info("migrate_days_of_week_to_array completed: day_of_week → days_of_week")
+    except Exception:
+        db.rollback()
+        logger.exception("migrate_days_of_week_to_array failed")
+        raise
+

@@ -58,7 +58,7 @@ def expand_calendar(
     while cur <= to_date:
         dow = cur.weekday()
         for action, profile in rows:
-            if action.day_of_week != dow:
+            if dow not in action.days_of_week:
                 continue
             action_time = _parse_hhmm(action.time)
             if action_time is None:
@@ -81,7 +81,7 @@ def expand_calendar(
                     profile_color=(profile.color or "#38bdf8"),
                     label=action.label,
                     channel=action.channel,
-                    day_of_week=action.day_of_week,
+                    day_of_week=dow,
                     time=action.time,
                     occurrence_utc=occurrence_utc,
                 )

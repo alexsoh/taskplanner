@@ -33,11 +33,13 @@ def run_migrations(db: Session) -> None:
         migrate_add_ip_whitelist_and_port,
         migrate_add_profile_color,
         migrate_add_upgrade_columns,
+        migrate_days_of_week_to_array,
     )
 
     migrate_add_upgrade_columns(db)
     migrate_add_ip_whitelist_and_port(db)
     migrate_add_profile_color(db)
+    migrate_days_of_week_to_array(db)
 
 
 def ensure_migrations(db: Session) -> None:
