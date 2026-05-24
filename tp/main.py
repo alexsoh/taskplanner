@@ -483,30 +483,39 @@ def list_executions(
 # --- Update ---
 
 @app.post("/api/update/check")
-def check_update(body: dict = Body(default={}), db: Session = Depends(get_db)):
-    token = (body.get("token") or get_upgrade_token(db)).strip()
-    if not token:
-        return {"error": "Please enter a Download Token and try again."}
-
-    evalex_base = get_evalex_base(db)
-    return check_for_update(token, evalex_base)
+def check_update(body: dict = Body(default_factory=dict), db: Session = Depends(get_db)):
+    token = body.get("token") or get_upgrade_token(db)
+    try:
+        return check_for_update(token=token, evalex_base=get_evalex_base(db))
+    except ValueError as exc:
+        return {"error": str(exc)}
 
 
 @app.post("/api/update/install")
-def install_update(body: dict = Body(default={}), db: Session = Depends(get_db)):
-    token = (body.get("token") or get_upgrade_token(db)).strip()
+def install_update(body: dict = Body(default_factory=dict), db: Session = Depends(get_db)):
+    token = body.get("token") or get_upgrade_token(db)
     if not token:
         return JSONResponse(
             {"error": "Please enter a Download Token and try again."},
             status_code=400,
         )
-
-    evalex_base = get_evalex_base(db)
-    result = start_upgrade(token, evalex_base)
-    if "error" in result:
-        return JSONResponse({"error": result["error"]}, status_code=500)
-
-    return JSONResponse(result, status_code=202)
+    try:
+        log_path = start_upgrade(
+            token=token,
+            app_dir=APP_DIR,
+            evalex_base=get_evalex_base(db),
+        )
+        return JSONResponse(
+            {"status": "upgrade_started", "logPath": str(log_path)},
+            status_code=202,
+        )
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except OSError as exc:
+        return JSONResponse(
+            {"error": f"Failed to start upgrade process: {exc}"},
+            status_code=500,
+        )
 
 
 # --- Settings ---

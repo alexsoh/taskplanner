@@ -173,24 +173,31 @@ export async function getVersion(): Promise<{ version: string }> {
   return json(await fetch(`${getApiBase()}/api/version`));
 }
 
-export async function checkForUpdate(token: string): Promise<UpdateCheckResponse> {
-  return json(
-    await fetch(`${getApiBase()}/api/update/check`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    }),
-  );
+/** Check for updates; empty token uses the saved download token on the server (PiyoAI-style). */
+export async function checkForUpdate(token = ''): Promise<UpdateCheckResponse> {
+  const resp = await fetch(`${getApiBase()}/api/update/check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  if (!resp.ok) {
+    const body = (await resp.json().catch(() => ({}))) as { error?: string; detail?: string };
+    throw new Error(body.error || body.detail || resp.statusText);
+  }
+  return resp.json() as Promise<UpdateCheckResponse>;
 }
 
-export async function installUpdate(token: string): Promise<{ status: string; logPath: string }> {
-  return json(
-    await fetch(`${getApiBase()}/api/update/install`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    }),
-  );
+export async function installUpdate(token = ''): Promise<{ status: string; logPath: string }> {
+  const resp = await fetch(`${getApiBase()}/api/update/install`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  if (!resp.ok) {
+    const body = (await resp.json().catch(() => ({}))) as { error?: string; detail?: string };
+    throw new Error(body.error || body.detail || resp.statusText);
+  }
+  return resp.json() as Promise<{ status: string; logPath: string }>;
 }
 
 export async function getServerConfig(): Promise<{ port: number; allowedIps: string[] }> {

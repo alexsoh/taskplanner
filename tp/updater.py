@@ -1,138 +1,163 @@
-"""Update checking and installation via Evalex."""
+"""Update checker and in-place upgrader for TaskPlanner.
+
+check_for_update  — queries the evalex server for the latest available version
+                    and compares to the running version.
+start_upgrade     — spawns the platform-appropriate upgrade script as a
+                    fully detached subprocess so it survives the service
+                    stopping mid-upgrade.
+"""
+
+from __future__ import annotations
 
 import logging
-import platform
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-from . import __version__, APP_DIR
+from . import APP_DIR, __version__
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("taskplanner.updater")
 
 APP_SLUG = "taskplanner"
 
 
-def _parse_version(version_str: str) -> tuple[int, ...]:
+def _parse_version(v: str) -> tuple[int, ...]:
     """Convert 'v1.2.3' or '1.2.3' to (1, 2, 3) for comparison."""
-    return tuple(int(x) for x in version_str.lstrip("v").split(".") if x.isdigit())
+    return tuple(int(x) for x in v.lstrip("v").split(".") if x.isdigit())
 
 
-def check_for_update(
-    token: str,
-    evalex_base: str = "https://evalex.duckdns.org",
-) -> dict[str, Any]:
-    """Check for available updates via Evalex.
-    
-    Args:
-        token: Evalex download token
-        evalex_base: Base URL of Evalex server
-        
-    Returns:
-        Dictionary with currentVersion, latestVersion, updateAvailable, 
-        changeSummary, tokenExpiresAt, or error
+def _normalize_latest_tag(raw: str) -> str:
+    """Strip a single leading 'v' from evalex version tags (not lstrip)."""
+    value = (raw or "").strip()
+    if value[:1].lower() == "v":
+        return value[1:]
+    return value
+
+
+def check_for_update(token: str = "", evalex_base: str = "") -> dict[str, Any]:
+    """Query the evalex server for the latest version and compare to the running version.
+
+    Returns a dict with keys:
+        currentVersion  – running version string (e.g. "0.1.46")
+        latestVersion   – latest release version (e.g. "0.1.47")
+        updateAvailable – bool
+        changeSummary   – text from summary.txt (may be empty)
+        tokenExpiresAt  – ISO 8601 timestamp string or None
+
+    Raises ValueError with a human-readable message on API errors.
     """
+    if not token:
+        raise ValueError("Please enter a Download Token and try again.")
+
+    base = (evalex_base or "https://evalex.duckdns.org").rstrip("/")
+    url = f"{base}/api/update/check"
+    params = {"token": token, "app": APP_SLUG}
+
     try:
-        url = f"{evalex_base}/api/update/check"
-        params = {"token": token, "app": APP_SLUG}
-        
         with httpx.Client(timeout=15.0) as client:
-            response = client.get(url, params=params)
-        
-        if response.status_code == 403:
-            return {"error": "Invalid, expired, or unauthorized token (403)"}
-        
-        if response.status_code != 200:
-            return {"error": f"Update check failed (HTTP {response.status_code})"}
-        
-        data = response.json()
-        
-        # Compare versions
-        current = _parse_version(__version__)
-        latest = _parse_version(data.get("latest_version", "0.0.0"))
-        update_available = latest > current
-        
-        return {
-            "currentVersion": __version__,
-            "latestVersion": data.get("latest_version", "0.0.0"),
-            "updateAvailable": update_available,
-            "changeSummary": data.get("change_summary", ""),
-            "tokenExpiresAt": data.get("token_expires_at"),
-        }
-    except httpx.RequestError as e:
-        logger.error(f"Failed to check for updates: {e}")
-        return {"error": f"Network error: {str(e)}"}
-    except Exception as e:
-        logger.error(f"Unexpected error checking updates: {e}")
-        return {"error": f"Unexpected error: {str(e)}"}
+            resp = client.get(url, params=params)
+    except httpx.RequestError as exc:
+        raise ValueError(f"Could not reach {base}: {exc}") from exc
+
+    if resp.status_code == 403:
+        detail = ""
+        try:
+            detail = resp.json().get("detail", "")
+        except Exception:
+            pass
+        raise ValueError(
+            detail or "Download token is invalid, expired, or not authorized for this app."
+        )
+    if not resp.is_success:
+        raise ValueError(f"Update API error: HTTP {resp.status_code}")
+
+    data = resp.json()
+    latest_tag = _normalize_latest_tag(data.get("latest_version") or "")
+    change_summary: str = data.get("change_summary") or ""
+    token_expires_at: str | None = data.get("token_expires_at")
+
+    current = _parse_version(__version__)
+    latest = _parse_version(latest_tag) if latest_tag else current
+    update_available = latest > current
+
+    logger.info(
+        "Update check: current=%s latest=%s available=%s",
+        __version__,
+        latest_tag,
+        update_available,
+    )
+
+    return {
+        "currentVersion": __version__,
+        "latestVersion": latest_tag or __version__,
+        "updateAvailable": update_available,
+        "changeSummary": change_summary,
+        "tokenExpiresAt": token_expires_at,
+    }
 
 
 def start_upgrade(
-    token: str,
-    evalex_base: str = "https://evalex.duckdns.org",
-) -> dict[str, Any]:
-    """Start an upgrade by running upgrade.sh in a detached subprocess.
-    
-    Args:
-        token: Evalex download token
-        evalex_base: Base URL of Evalex server
-        
-    Returns:
-        Dictionary with status and logPath
-    """
-    try:
-        log_dir = APP_DIR / "logs"
-        log_dir.mkdir(exist_ok=True)
-        log_path = log_dir / "upgrade.log"
-        
-        upgrade_script = APP_DIR / "upgrade.sh"
-        if not upgrade_script.exists():
-            return {"error": "upgrade.sh not found"}
-        
-        # Prepare arguments
-        args = [
-            str(upgrade_script),
-            "--token", token,
-            "--evalex-base", evalex_base,
-        ]
-        
-        # On Windows, use PowerShell; on Unix, use bash
-        if platform.system() == "Windows":
-            ps_script = APP_DIR / "upgrade.ps1"
-            if not ps_script.exists():
-                return {"error": "upgrade.ps1 not found"}
+    token: str = "",
+    app_dir: Path | None = None,
+    evalex_base: str = "",
+) -> Path:
+    """Spawn the upgrade script as a fully detached process and return immediately.
 
-            cmd = [
-                "powershell.exe",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                str(ps_script),
-                "-Token",
-                token,
-                "-EvalexBase",
-                evalex_base,
-            ]
-            # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP (same as PiyoAI)
-            creation_flags = 0x08000000 | 0x00000200
-            subprocess.Popen(cmd, creationflags=creation_flags, close_fds=False)
-        else:
-            # Unix: bash
-            with open(log_path, "w") as log_file:
-                subprocess.Popen(
-                    ["bash"] + args,
-                    stdout=log_file,
-                    stderr=subprocess.STDOUT,
-                    start_new_session=True,  # Detach from parent
-                )
-        
-        return {
-            "status": "upgrade_started",
-            "logPath": str(log_path),
-        }
-    except Exception as e:
-        logger.error(f"Failed to start upgrade: {e}")
-        return {"error": f"Failed to start upgrade: {str(e)}"}
+    On Windows: runs ``upgrade.ps1`` via powershell.exe with CREATE_NO_WINDOW.
+    On Linux:   runs ``upgrade.sh`` via bash with a new session.
+
+    Output is redirected to ``logs/upgrade.log`` inside ``app_dir``.
+
+    Returns the Path to the log file.
+
+    Raises:
+        RuntimeError  if the upgrade script is not found.
+        OSError       if the subprocess cannot be spawned.
+    """
+    if app_dir is None:
+        app_dir = APP_DIR
+
+    log_path = app_dir / "logs" / "upgrade.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if sys.platform == "win32":
+        script = app_dir / "upgrade.ps1"
+        if not script.exists():
+            raise RuntimeError(f"upgrade.ps1 not found at {script}")
+        cmd = [
+            "powershell.exe",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script),
+        ]
+        if token:
+            cmd += ["-Token", token]
+        if evalex_base:
+            cmd += ["-EvalexBase", evalex_base]
+        creation_flags = 0x08000000 | 0x00000200
+        subprocess.Popen(cmd, creationflags=creation_flags, close_fds=False)
+        logger.info("Upgrade started (Windows), log: %s", log_path)
+    else:
+        script = app_dir / "upgrade.sh"
+        if not script.exists():
+            raise RuntimeError(f"upgrade.sh not found at {script}")
+        cmd = ["bash", str(script)]
+        if token:
+            cmd += ["--token", token]
+        if evalex_base:
+            cmd += ["--evalex-base", evalex_base]
+        with open(log_path, "a", encoding="utf-8") as log_file:
+            subprocess.Popen(
+                cmd,
+                start_new_session=True,
+                stdout=log_file,
+                stderr=log_file,
+            )
+        logger.info("Upgrade started (Linux), log: %s", log_path)
+
+    return log_path

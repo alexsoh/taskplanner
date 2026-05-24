@@ -150,10 +150,14 @@ class TestUpdateCheckEndpoint:
         resp = client.post("/api/update/check", json={})
 
         assert resp.status_code == 200, resp.text
-        mock_check.assert_called_once_with("evlx_saved", "https://evalex.example.test")
+        mock_check.assert_called_once_with(
+            token="evlx_saved",
+            evalex_base="https://evalex.example.test",
+        )
 
+    @mock.patch("tp.main.get_evalex_base", return_value="https://evalex.example.test")
     @mock.patch("tp.main.get_upgrade_token", return_value="")
-    def test_check_missing_token_returns_error_body(self, _mock_token):
+    def test_check_missing_token_returns_error_body(self, _mock_token, _mock_base):
         client = TestClient(app)
         resp = client.post("/api/update/check", json={})
 
@@ -214,6 +218,7 @@ class TestCheckForUpdate:
         """Test invalid token (403)."""
         mock_response = mock.Mock()
         mock_response.status_code = 403
+        mock_response.json.return_value = {"detail": "Token not valid for taskplanner."}
 
         mock_client = mock.Mock()
         mock_client.__enter__ = mock.Mock(return_value=mock_client)
@@ -221,10 +226,8 @@ class TestCheckForUpdate:
         mock_client.get.return_value = mock_response
         mock_client_class.return_value = mock_client
 
-        result = check_for_update("invalid_token")
-
-        assert "error" in result
-        assert "403" in result["error"]
+        with pytest.raises(ValueError, match="taskplanner"):
+            check_for_update("invalid_token")
 
     @mock.patch("tp.updater.httpx.Client")
     def test_check_for_update_network_error(self, mock_client_class):
@@ -233,78 +236,64 @@ class TestCheckForUpdate:
 
         mock_client_class.side_effect = httpx.ConnectError("Network error")
 
+        with pytest.raises(ValueError, match="Network error"):
+            check_for_update("evlx_test")
+
+    @mock.patch("tp.updater.httpx.Client")
+    def test_check_for_update_strips_v_prefix(self, mock_client_class):
+        """Evalex tags like v0.2.0 compare correctly against running version."""
+        mock_response = mock.Mock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.json.return_value = {"latest_version": "v9.9.9"}
+
+        mock_client = mock.Mock()
+        mock_client.__enter__ = mock.Mock(return_value=mock_client)
+        mock_client.__exit__ = mock.Mock(return_value=None)
+        mock_client.get.return_value = mock_response
+        mock_client_class.return_value = mock_client
+
         result = check_for_update("evlx_test")
 
-        assert "error" in result
-        assert "Network error" in result["error"]
+        assert result["latestVersion"] == "9.9.9"
+        assert result["updateAvailable"] is True
 
 
 class TestStartUpgrade:
     """Test upgrade installation."""
 
     @mock.patch("tp.updater.subprocess.Popen")
-    @mock.patch("tp.updater.platform.system")
-    def test_start_upgrade_unix(self, mock_platform, mock_popen):
+    @mock.patch("tp.updater.sys.platform", "linux")
+    def test_start_upgrade_unix(self, mock_popen):
         """Test upgrade start on Unix system."""
-        mock_platform.return_value = "Linux"
+        with mock.patch.object(Path, "exists", return_value=True):
+            log_path = start_upgrade("evlx_test")
 
-        result = start_upgrade("evlx_test")
-
-        assert result["status"] == "upgrade_started"
-        assert "logPath" in result
-        assert "logs/upgrade.log" in result["logPath"]
-
-        # Verify Popen was called with bash
+        assert log_path.name == "upgrade.log"
         mock_popen.assert_called_once()
-        call_args = mock_popen.call_args
-        assert call_args[0][0][0] == "bash"
+        assert mock_popen.call_args[0][0][0] == "bash"
 
     @mock.patch("tp.updater.subprocess.Popen")
-    @mock.patch("tp.updater.platform.system")
-    def test_start_upgrade_windows(self, mock_platform, mock_popen):
-        """Test upgrade start on Windows system - platform detection validated."""
-        # This is complex to mock due to Path objects.
-        # The Unix test validates the core logic works.
-        # We verify the platform detection works correctly.
-        mock_platform.return_value = "Windows"
-        assert mock_platform() == "Windows"
+    @mock.patch("tp.updater.sys.platform", "win32")
+    def test_start_upgrade_windows(self, mock_popen):
+        """Test upgrade start on Windows."""
+        with mock.patch.object(Path, "exists", return_value=True):
+            log_path = start_upgrade("evlx_test")
+
+        assert log_path.name == "upgrade.log"
+        mock_popen.assert_called_once()
+        assert mock_popen.call_args[0][0][0] == "powershell.exe"
 
     def test_start_upgrade_missing_bash_script(self):
         """Test upgrade fails if upgrade.sh is missing on Unix."""
-        with mock.patch("tp.updater.platform.system", return_value="Linux"):
-            with mock.patch("tp.updater.APP_DIR") as mock_app_dir:
-                mock_logs = mock.Mock()
-                mock_script = mock.Mock()
-                mock_script.exists.return_value = False
-                
-                def path_div(self, key):
-                    if key == "logs":
-                        return mock_logs
-                    else:
-                        return mock_script
-                
-                mock_app_dir.__truediv__ = path_div
-
-                result = start_upgrade("evlx_test")
-
-                assert "error" in result
+        with mock.patch("tp.updater.sys.platform", "linux"):
+            with mock.patch.object(Path, "exists", return_value=False):
+                with pytest.raises(RuntimeError, match="upgrade.sh"):
+                    start_upgrade("evlx_test")
 
     def test_start_upgrade_missing_ps_script(self):
         """Test upgrade fails if upgrade.ps1 is missing on Windows."""
-        with mock.patch("tp.updater.platform.system", return_value="Windows"):
-            with mock.patch("tp.updater.APP_DIR") as mock_app_dir:
-                mock_logs = mock.Mock()
-                mock_script = mock.Mock()
-                mock_script.exists.return_value = False
-                
-                def path_div(self, key):
-                    if key == "logs":
-                        return mock_logs
-                    else:
-                        return mock_script
-                
-                mock_app_dir.__truediv__ = path_div
-
-                result = start_upgrade("evlx_test")
-
-                assert "error" in result
+        with mock.patch("tp.updater.sys.platform", "win32"):
+            with mock.patch.object(Path, "exists", return_value=False):
+                with pytest.raises(RuntimeError, match="upgrade.ps1"):
+                    start_upgrade("evlx_test")

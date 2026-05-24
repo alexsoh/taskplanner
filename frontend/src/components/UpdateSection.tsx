@@ -67,17 +67,14 @@ export function UpdateSection({
   }, [installing, checkResult]);
 
   const handleCheckForUpdates = async () => {
-    if (!token) {
-      setError('Token is required');
-      return;
-    }
+    const effectiveToken = token.trim() || (upgradeToken ?? '').trim();
 
     setChecking(true);
     setError('');
     setStatusMsg('Checking for updates…');
 
     try {
-      const result = await api.checkForUpdate(token);
+      const result = await api.checkForUpdate(effectiveToken);
       if (result.error) {
         setError(result.error);
       } else {
@@ -96,8 +93,9 @@ export function UpdateSection({
   };
 
   const handleInstall = async () => {
-    if (!token) {
-      setError('Token is required');
+    const effectiveToken = token.trim() || (upgradeToken ?? '').trim();
+    if (!effectiveToken) {
+      setError('Please enter a Download Token and try again.');
       return;
     }
 
@@ -110,7 +108,7 @@ export function UpdateSection({
     setElapsedSeconds(0);
 
     try {
-      const result = await api.installUpdate(token);
+      const result = await api.installUpdate(effectiveToken);
       setLogPath(result.logPath);
       setStatusMsg('Upgrade in progress. Waiting for app to restart…');
     } catch (e) {
@@ -160,7 +158,7 @@ export function UpdateSection({
         <button
           type="button"
           onClick={handleCheckForUpdates}
-          disabled={!token || checking || installing}
+          disabled={checking || installing}
           className="px-3 py-1.5 bg-accent text-bg-primary rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition"
         >
           {checking ? 'Checking…' : 'Check for Updates'}
