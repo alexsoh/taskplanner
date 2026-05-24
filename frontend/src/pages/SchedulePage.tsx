@@ -5,7 +5,12 @@ import WeeklyCalendar from '../components/WeeklyCalendar.tsx';
 import type { CalendarEvent, NotificationChannel, Profile, ScheduledAction } from '../types.ts';
 import { CHANNEL_COLORS, DAY_NAMES, defaultNotificationForChannel } from '../utils/notifications.ts';
 
-type Props = { profile: Profile | null };
+type Props = {
+  profiles: Profile[];
+  selectedId: string | null;
+  onSelectProfile: (id: string | null) => void;
+  onOpenHistory: (profileId: string | null) => void;
+};
 
 function mondayOfWeek(d: Date): Date {
   const x = new Date(d);
@@ -15,7 +20,12 @@ function mondayOfWeek(d: Date): Date {
   return x;
 }
 
-export default function SchedulePage({ profile }: Props) {
+export default function SchedulePage({
+  profiles,
+  selectedId,
+  onSelectProfile,
+  onOpenHistory,
+}: Props) {
   const [actions, setActions] = useState<ScheduledAction[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [weekStart, setWeekStart] = useState(() => mondayOfWeek(new Date()));
@@ -29,6 +39,8 @@ export default function SchedulePage({ profile }: Props) {
   } | null>(null);
   const [testMsg, setTestMsg] = useState('');
   const [error, setError] = useState('');
+
+  const profile = profiles.find((p) => p.id === selectedId) ?? null;
 
   const load = useCallback(async () => {
     if (!profile) return;
@@ -52,7 +64,11 @@ export default function SchedulePage({ profile }: Props) {
   }, [load]);
 
   if (!profile) {
-    return <p className="text-text-muted text-sm">Select a profile to manage schedules.</p>;
+    return (
+      <div className="space-y-4 max-w-6xl">
+        <p className="text-text-muted text-sm">Select a profile to manage schedules.</p>
+      </div>
+    );
   }
 
   const startNew = (channel: NotificationChannel) => {
@@ -101,22 +117,59 @@ export default function SchedulePage({ profile }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">Schedule — {profile.name}</h2>
-        <div className="flex gap-2 items-center">
-          <button type="button" className="px-2 py-1 text-sm border border-border rounded" onClick={() => shiftWeek(-1)}>
-            ←
-          </button>
-          <span className="text-sm text-text-muted">
-            Week of {weekStart.toLocaleDateString()}
-          </span>
-          <button type="button" className="px-2 py-1 text-sm border border-border rounded" onClick={() => shiftWeek(1)}>
-            →
+      {/* Header with profile selector and history link */}
+      <div className="space-y-3">
+        <h2 className="text-2xl font-bold text-text-primary">Schedules</h2>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-text-secondary">Profile:</label>
+            <select
+              value={selectedId ?? ''}
+              onChange={(e) => onSelectProfile(e.target.value || null)}
+              className="px-3 py-1.5 bg-bg-tertiary border border-border rounded text-sm"
+            >
+              <option value="">Select a profile...</option>
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenHistory(selectedId)}
+            className="text-sm text-accent hover:text-accent/80 transition-colors underline"
+          >
+            View execution history →
           </button>
         </div>
       </div>
 
       {error && <p className="text-sm text-error">{error}</p>}
+
+      {/* Week navigation */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-2 items-center">
+          <button
+            type="button"
+            className="px-2 py-1 text-sm border border-border rounded hover:bg-bg-tertiary transition-colors"
+            onClick={() => shiftWeek(-1)}
+          >
+            ←
+          </button>
+          <span className="text-sm text-text-muted">
+            Week of {weekStart.toLocaleDateString()}
+          </span>
+          <button
+            type="button"
+            className="px-2 py-1 text-sm border border-border rounded hover:bg-bg-tertiary transition-colors"
+            onClick={() => shiftWeek(1)}
+          >
+            →
+          </button>
+        </div>
+      </div>
 
       <WeeklyCalendar events={events} weekStart={weekStart} />
 
@@ -125,7 +178,7 @@ export default function SchedulePage({ profile }: Props) {
           <button
             key={ch}
             type="button"
-            className="px-3 py-1.5 text-xs rounded border border-border"
+            className="px-3 py-1.5 text-xs rounded border border-border hover:bg-bg-tertiary transition-colors"
             style={{ color: CHANNEL_COLORS[ch] }}
             onClick={() => startNew(ch)}
           >
@@ -183,7 +236,14 @@ export default function SchedulePage({ profile }: Props) {
             <button type="button" onClick={save} className="px-4 py-2 bg-accent text-bg-primary rounded text-sm">
               Save
             </button>
-            <button type="button" onClick={() => { setDraft(null); setEditing(null); }} className="px-4 py-2 border border-border rounded text-sm">
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(null);
+                setEditing(null);
+              }}
+              className="px-4 py-2 border border-border rounded text-sm"
+            >
               Cancel
             </button>
             {editing && (

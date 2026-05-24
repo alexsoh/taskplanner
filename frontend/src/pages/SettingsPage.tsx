@@ -20,14 +20,22 @@ export default function SettingsPage() {
     api.getSettings().then(setSettings).catch((e) => setError(String(e)));
   }, []);
 
+  useEffect(() => {
+    if (activeTab === 'logs') {
+      loadLogs();
+    }
+  }, [activeTab]);
+
   const loadLogs = async () => {
     setLoadingLogs(true);
     try {
-      const tpResult = await fetch('/api/logs/taskplanner').then(r => r.json());
-      const upgResult = await fetch('/api/logs/upgrade').then(r => r.json()).catch(() => ({ content: '(upgrade log not available)' }));
+      const [tpResult, upgResult] = await Promise.all([
+        api.getLogContent('taskplanner'),
+        api.getLogContent('upgrade').catch(() => 'Upgrade log not available'),
+      ]);
       setLogs({
-        taskplanner: tpResult.content || '',
-        upgrade: upgResult.content || '',
+        taskplanner: tpResult,
+        upgrade: upgResult,
       });
     } catch (e) {
       setError(`Failed to load logs: ${e}`);
@@ -41,7 +49,6 @@ export default function SettingsPage() {
     setStatus('Saving…');
     setError('');
     try {
-      // Create a clean update payload that includes upgradeToken
       const updatePayload: Partial<AppSettings> = {
         mqtt: settings.mqtt,
         telegram: settings.telegram,
@@ -100,19 +107,18 @@ export default function SettingsPage() {
     setAddingClientIp(true);
     setError('');
     try {
-      // Detect public IP using api.ipify.org
       const response = await fetch('https://api.ipify.org?format=json', {
         signal: AbortSignal.timeout(8000),
         cache: 'no-store',
       });
-      
+
       if (!response.ok) {
         setError(`Could not detect public IP (HTTP ${response.status}). Add it manually or try again.`);
         setAddingClientIp(false);
         return;
       }
 
-      const data = await response.json() as { ip?: string };
+      const data = (await response.json()) as { ip?: string };
       const ip = (data.ip || '').trim();
 
       if (!ip) {
@@ -121,14 +127,12 @@ export default function SettingsPage() {
         return;
       }
 
-      // Check if already in whitelist
       if (settings?.allowedIps?.includes(ip)) {
         setStatus('That address is already in the whitelist.');
         setAddingClientIp(false);
         return;
       }
 
-      // Add the IP via API
       const result = await api.allowClientIp(ip);
       if (result.ok || result.added) {
         setSettings({ ...settings, allowedIps: result.allowedIps } as AppSettings);
@@ -168,8 +172,8 @@ export default function SettingsPage() {
   const serverPort = settings.serverPort || 8200;
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <h2 className="text-lg font-semibold">Settings</h2>
+    <div className="space-y-6 max-w-3xl">
+      <h2 className="text-2xl font-bold text-text-primary">Settings</h2>
       {error && <p className="text-sm text-error">{error}</p>}
 
       {/* Tab Navigation */}
@@ -179,7 +183,7 @@ export default function SettingsPage() {
           className={`px-4 py-2 font-medium text-sm transition ${
             activeTab === 'notifications'
               ? 'border-b-2 border-accent text-accent'
-              : 'text-text-muted hover:text-text'
+              : 'text-text-muted hover:text-text-primary'
           }`}
         >
           Notifications
@@ -189,7 +193,7 @@ export default function SettingsPage() {
           className={`px-4 py-2 font-medium text-sm transition ${
             activeTab === 'server'
               ? 'border-b-2 border-accent text-accent'
-              : 'text-text-muted hover:text-text'
+              : 'text-text-muted hover:text-text-primary'
           }`}
         >
           Server
@@ -199,17 +203,17 @@ export default function SettingsPage() {
           className={`px-4 py-2 font-medium text-sm transition ${
             activeTab === 'updates'
               ? 'border-b-2 border-accent text-accent'
-              : 'text-text-muted hover:text-text'
+              : 'text-text-muted hover:text-text-primary'
           }`}
         >
           Updates
         </button>
         <button
-          onClick={() => { setActiveTab('logs'); loadLogs(); }}
+          onClick={() => setActiveTab('logs')}
           className={`px-4 py-2 font-medium text-sm transition ${
             activeTab === 'logs'
               ? 'border-b-2 border-accent text-accent'
-              : 'text-text-muted hover:text-text'
+              : 'text-text-muted hover:text-text-primary'
           }`}
         >
           Logs
@@ -219,8 +223,8 @@ export default function SettingsPage() {
       {/* Notifications Tab */}
       {activeTab === 'notifications' && (
         <div className="space-y-6">
-          <section className="space-y-3 p-4 border border-border rounded-lg bg-bg-secondary">
-            <h3 className="font-medium">MQTT</h3>
+          <section className="space-y-4 p-4 border border-border rounded-lg bg-bg-secondary">
+            <h3 className="font-medium text-text-primary">MQTT</h3>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -231,46 +235,50 @@ export default function SettingsPage() {
               />
               Enabled
             </label>
-            <label className="block text-sm space-y-1">
-              Broker
-              <input
-                className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded"
-                value={mqtt.broker}
-                onChange={(e) => setSettings({ ...settings, mqtt: { ...mqtt, broker: e.target.value } })}
-              />
-            </label>
-            <label className="block text-sm space-y-1">
-              Port
-              <input
-                type="number"
-                className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded"
-                value={mqtt.port}
-                onChange={(e) =>
-                  setSettings({ ...settings, mqtt: { ...mqtt, port: parseInt(e.target.value, 10) || 1883 } })
-                }
-              />
-            </label>
-            <label className="block text-sm space-y-1">
-              Username
-              <input
-                className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded"
-                value={mqtt.username}
-                onChange={(e) => setSettings({ ...settings, mqtt: { ...mqtt, username: e.target.value } })}
-              />
-            </label>
-            <label className="block text-sm space-y-1">
-              Password
-              <input
-                type="password"
-                className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded"
-                value={mqtt.password}
-                onChange={(e) => setSettings({ ...settings, mqtt: { ...mqtt, password: e.target.value } })}
-              />
-            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="block text-sm space-y-1">
+                Broker
+                <input
+                  className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded text-sm"
+                  value={mqtt.broker}
+                  onChange={(e) => setSettings({ ...settings, mqtt: { ...mqtt, broker: e.target.value } })}
+                />
+              </label>
+              <label className="block text-sm space-y-1">
+                Port
+                <input
+                  type="number"
+                  className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded text-sm"
+                  value={mqtt.port}
+                  onChange={(e) =>
+                    setSettings({ ...settings, mqtt: { ...mqtt, port: parseInt(e.target.value, 10) || 1883 } })
+                  }
+                />
+              </label>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="block text-sm space-y-1">
+                Username
+                <input
+                  className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded text-sm"
+                  value={mqtt.username}
+                  onChange={(e) => setSettings({ ...settings, mqtt: { ...mqtt, username: e.target.value } })}
+                />
+              </label>
+              <label className="block text-sm space-y-1">
+                Password
+                <input
+                  type="password"
+                  className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded text-sm"
+                  value={mqtt.password}
+                  onChange={(e) => setSettings({ ...settings, mqtt: { ...mqtt, password: e.target.value } })}
+                />
+              </label>
+            </div>
           </section>
 
           <section className="space-y-3 p-4 border border-border rounded-lg bg-bg-secondary">
-            <h3 className="font-medium">Telegram</h3>
+            <h3 className="font-medium text-text-primary">Telegram</h3>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -285,7 +293,7 @@ export default function SettingsPage() {
               Bot token
               <input
                 type="password"
-                className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded"
+                className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded text-sm"
                 value={tg.token}
                 onChange={(e) => setSettings({ ...settings, telegram: { ...tg, token: e.target.value } })}
               />
@@ -297,36 +305,38 @@ export default function SettingsPage() {
       {/* Server Tab */}
       {activeTab === 'server' && (
         <div className="space-y-6">
-          <section className="space-y-3 p-4 border border-border rounded-lg bg-bg-secondary">
-            <h3 className="font-medium">Port Configuration</h3>
-            <label className="block text-sm space-y-1">
-              Server Port
-              <input
-                type="number"
-                min="1"
-                max="65535"
-                className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded"
-                value={serverPort}
-                onChange={(e) => {
-                  const port = parseInt(e.target.value, 10);
-                  setSettings({ ...settings, serverPort: port });
-                }}
-              />
-            </label>
+          <section className="space-y-4 p-4 border border-border rounded-lg bg-bg-secondary">
+            <h3 className="font-medium text-text-primary">Port Configuration</h3>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-sm space-y-1">
+                Server Port
+                <input
+                  type="number"
+                  min="1"
+                  max="65535"
+                  className="px-2 py-1.5 bg-bg-tertiary border border-border rounded text-sm"
+                  value={serverPort}
+                  onChange={(e) => {
+                    const port = parseInt(e.target.value, 10);
+                    setSettings({ ...settings, serverPort: port });
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => handleUpdatePort(serverPort)}
+                className="px-3 py-1.5 bg-bg-tertiary border border-border rounded hover:bg-bg-quaternary text-sm font-medium transition"
+              >
+                Update Port
+              </button>
+            </div>
             <p className="text-xs text-text-muted">
               Requires server restart to take effect
             </p>
-            <button
-              type="button"
-              onClick={() => handleUpdatePort(serverPort)}
-              className="px-3 py-1.5 bg-bg-tertiary border border-border rounded hover:bg-bg-quaternary text-sm font-medium transition"
-            >
-              Update Port
-            </button>
           </section>
 
           <section className="space-y-3 p-4 border border-border rounded-lg bg-bg-secondary">
-            <h3 className="font-medium">IP Whitelist</h3>
+            <h3 className="font-medium text-text-primary">IP Whitelist</h3>
             {allowedIps.length === 0 && (
               <p className="text-sm text-warning">Warning: Whitelist is empty - all IPs are allowed</p>
             )}
@@ -357,7 +367,7 @@ export default function SettingsPage() {
               </div>
 
               <details className="text-sm">
-                <summary className="cursor-pointer text-text-muted hover:text-text transition font-medium">
+                <summary className="cursor-pointer text-text-muted hover:text-text-primary transition font-medium">
                   Advanced (Loopback - always allowed)
                 </summary>
                 <div className="mt-2 pl-4 space-y-2 border-l border-border">
@@ -380,7 +390,7 @@ export default function SettingsPage() {
               Add IP or CIDR
               <div className="flex gap-2">
                 <input
-                  className="flex-1 px-2 py-1.5 bg-bg-tertiary border border-border rounded"
+                  className="flex-1 px-2 py-1.5 bg-bg-tertiary border border-border rounded text-sm"
                   placeholder="192.168.1.100 or 10.0.0.0/24"
                   value={newIp}
                   onChange={(e) => setNewIp(e.target.value)}
@@ -437,14 +447,14 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-2">
-            <h3 className="font-medium">TaskPlanner Log</h3>
+            <h3 className="font-medium text-text-primary">TaskPlanner Log</h3>
             <pre className="bg-bg-tertiary border border-border rounded p-3 text-xs overflow-auto max-h-64 font-mono">
               {logs.taskplanner || '(no logs)'}
             </pre>
           </div>
 
           <div className="space-y-2">
-            <h3 className="font-medium">Upgrade Log</h3>
+            <h3 className="font-medium text-text-primary">Upgrade Log</h3>
             <pre className="bg-bg-tertiary border border-border rounded p-3 text-xs overflow-auto max-h-64 font-mono">
               {logs.upgrade || '(no logs)'}
             </pre>

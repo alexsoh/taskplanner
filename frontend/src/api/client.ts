@@ -207,3 +207,19 @@ export async function allowClientIp(ip: string): Promise<{ ok?: boolean; added: 
     }),
   );
 }
+
+export async function getLogContent(filename: 'taskplanner' | 'upgrade'): Promise<string> {
+  try {
+    const resp = await fetch(`${getApiBase()}/api/logs/${filename}`);
+    if (resp.status === 404) {
+      return `Log file not found yet.`;
+    }
+    if (!resp.ok) {
+      throw new Error(resp.statusText);
+    }
+    const data = await resp.json() as { content?: string };
+    return data.content || '';
+  } catch (e) {
+    throw new Error(`Failed to load logs: ${String(e)}`);
+  }
+}

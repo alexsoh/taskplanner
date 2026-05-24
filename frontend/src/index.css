@@ -4,6 +4,7 @@
   --color-bg-primary: #0f172a;
   --color-bg-secondary: #1e293b;
   --color-bg-tertiary: #334155;
+  --color-bg-hover: #475569;
   --color-border: #475569;
   --color-border-focus: #38bdf8;
   --color-accent: #38bdf8;
@@ -18,3 +19,34 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   min-height: 100vh;
 }
+
+/* Desktop defaults for elements that CSS will hide on mobile */
+.taskplanner-sidebar .nav-label,
+.taskplanner-sidebar .nav-logo-text { display: inline; }
+
+.taskplanner-main {
+  width: 100%;
+  padding: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  /* Sidebar -> icon-only rail */
+  .taskplanner-sidebar { width: 56px !important; padding: 8px 0; }
+  .taskplanner-sidebar .nav-label,
+  .taskplanner-sidebar .nav-logo-text { display: none !important; }
+  .taskplanner-sidebar button {
+    justify-content: center;
+    padding: 12px 0 !important;
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .taskplanner-sidebar .nav-icon { font-size: 20px; width: auto; }
+  .taskplanner-sidebar .nav-header { justify-content: center; padding: 8px !important; }
+
+  /* Main content */
+  .taskplanner-main {
+    padding: 12px !important;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
