@@ -9,11 +9,18 @@ from .models import Profile, ScheduledAction
 from .schemas import CalendarEvent
 
 
-def _parse_hhmm(s: str) -> time:
+def _parse_hhmm(s: str) -> time | None:
     parts = (s or "00:00").strip().split(":")
-    h = int(parts[0]) if parts else 0
-    m = int(parts[1]) if len(parts) > 1 else 0
-    return time(hour=h % 24, minute=m % 60)
+    if len(parts) < 2:
+        return None
+    try:
+        h = int(parts[0])
+        m = int(parts[1])
+    except ValueError:
+        return None
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        return None
+    return time(hour=h, minute=m)
 
 
 def expand_calendar(
@@ -42,18 +49,21 @@ def expand_calendar(
         for action, profile in rows:
             if action.day_of_week != dow:
                 continue
+            action_time = _parse_hhmm(action.time)
+            if action_time is None:
+                continue
             try:
                 tz = ZoneInfo(profile.timezone or "UTC")
             except Exception:
                 tz = ZoneInfo("UTC")
-            local_dt = datetime.combine(cur, _parse_hhmm(action.time), tzinfo=tz)
+            local_dt = datetime.combine(cur, action_time, tzinfo=tz)
             occurrence_utc = local_dt.astimezone(timezone.utc)
             events.append(
                 CalendarEvent(
                     action_id=action.id,
                     profile_id=profile.id,
                     profile_name=profile.name,
-                    profile_color=profile.color,
+                    profile_color=(profile.color or "#38bdf8"),
                     label=action.label,
                     channel=action.channel,
                     day_of_week=action.day_of_week,

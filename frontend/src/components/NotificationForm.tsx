@@ -167,10 +167,11 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
 
     const handleDiscover = useCallback(async () => {
       const app = String(configRef.current.app ?? 'vizmux');
-      const serverAddress = String(configRef.current.serverAddress ?? '');
+      const serverAddress = String(configRef.current.serverAddress ?? '').trim();
 
-      if (!serverAddress.trim()) {
+      if (!serverAddress) {
         setDiscoveryError('Server address is required');
+        setDiscoveredCameras([]);
         return;
       }
 
@@ -194,11 +195,17 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
     }, []);
 
     useEffect(() => {
-      if (selectedIds.length === 0) return;
       const serverAddress = String(config.serverAddress ?? '').trim();
-      if (!serverAddress || discovering || discoveredCameras.length > 0) return;
-      void handleDiscover();
-    }, [config.serverAddress, discoveredCameras.length, discovering, handleDiscover, selectedIds.length]);
+      if (!serverAddress) {
+        setDiscoveredCameras([]);
+        setDiscoveryError(null);
+        return;
+      }
+      const timer = window.setTimeout(() => {
+        void handleDiscover();
+      }, 300);
+      return () => window.clearTimeout(timer);
+    }, [config.app, config.serverAddress, handleDiscover]);
 
     useEffect(() => {
       if (discoveredCameras.length === 0 || selectedIds.length === 0) return;
@@ -227,6 +234,15 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
     }, [discoveredCameras]);
 
     const labelForCamera = (id: string) => cameraLabels[id] || discoveredNames.get(id) || id;
+
+    const selectedCsv = useMemo(
+      () =>
+        selectedIds
+          .map((id) => formatCameraLabel(id, labelForCamera(id)))
+          .filter((name) => name !== 'Unnamed camera')
+          .join(', '),
+      [selectedIds, cameraLabels, discoveredNames],
+    );
 
     const toggleCamera = (cameraId: string, checked: boolean, cameraName?: string) => {
       const current = savedCameraIds(configRef.current);
@@ -272,50 +288,31 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
               value={String(config.serverAddress ?? '')}
               onChange={(e) => {
                 set('serverAddress', e.target.value);
-                setDiscoveredCameras([]);
                 setDiscoveryError(null);
               }}
             />
           </Field>
         </div>
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-text-muted">Cameras</span>
+        <div className="space-y-2 text-sm">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-text-muted shrink-0">Cameras</span>
+            {selectedCsv ? (
+              <span className="text-sm truncate min-w-0 flex-1">{selectedCsv}</span>
+            ) : (
+              <span className="flex-1" />
+            )}
             <button
               type="button"
               disabled={discovering || !String(config.serverAddress ?? '').trim()}
               onClick={() => void handleDiscover()}
-              className="text-xs px-2 py-0.5 bg-bg-secondary border border-border rounded hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="shrink-0 text-xs px-2 py-1 bg-bg-secondary border border-border rounded hover:bg-bg-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {discovering ? 'Discovering...' : 'Discover'}
             </button>
           </div>
-          {selectedIds.length > 0 && (
-            <div className="border border-accent/30 rounded p-2 bg-bg-tertiary space-y-1">
-              <div className="text-xs font-medium text-text-secondary">Selected cameras</div>
-              <ul className="space-y-1">
-                {selectedIds.map((id) => (
-                  <li
-                    key={id}
-                    className="flex items-center justify-between gap-2 text-sm py-1 px-1 rounded hover:bg-bg-secondary"
-                  >
-                    <span className="truncate">{formatCameraLabel(id, labelForCamera(id))}</span>
-                    <button
-                      type="button"
-                      onClick={() => toggleCamera(id, false)}
-                      className="shrink-0 text-xs text-text-muted hover:text-error"
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {discoveryError && <p className="text-xs text-error">{discoveryError}</p>}
-          {discoveredCameras.length > 0 && (
-            <div className="border border-border rounded p-2 bg-bg-tertiary space-y-2 max-h-48 overflow-y-auto">
-              <div className="text-xs text-text-muted">Available cameras</div>
+          {discoveryError ? <p className="text-xs text-error">{discoveryError}</p> : null}
+          {discoveredCameras.length > 0 ? (
+            <div className="border border-border rounded p-2 bg-bg-tertiary space-y-1 max-h-48 overflow-y-auto">
               {discoveredCameras.map((cam) => {
                 const isSelected = selectedIds.includes(cam.id);
                 return (
@@ -331,7 +328,9 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
                 );
               })}
             </div>
-          )}
+          ) : discovering ? (
+            <p className="text-xs text-text-muted">Loading cameras…</p>
+          ) : null}
         </div>
         <Field label="Action">
           <div className="space-y-2">
