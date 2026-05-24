@@ -19,6 +19,13 @@ class ProfileUpdate(BaseModel):
     enabled: Optional[bool] = None
     color: Optional[str] = None
 
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not v.strip():
+            raise ValueError("name must not be empty")
+        return v
+
 
 class ProfileOut(BaseModel):
     id: str
