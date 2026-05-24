@@ -51,7 +51,94 @@ function formatCameraLabel(id: string, name: string): string {
 export default function NotificationForm({ channel, config, onChange }: Props) {
   const configRef = useRef(config);
   configRef.current = config;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   const set = (k: string, v: unknown) => onChange({ ...configRef.current, [k]: v });
+
+  // Evalex-specific state — always declared to satisfy Rules of Hooks
+  const [discovering, setDiscovering] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [discoveredCameras, setDiscoveredCameras] = useState<Array<{ id: string; name: string }>>([]);
+  const [camerasExpanded, setCamerasExpanded] = useState(false);
+
+  // Reset evalex discovery state when switching away from the evalex channel
+  useEffect(() => {
+    if (channel !== 'evalex') {
+      setDiscoveredCameras([]);
+      setCamerasExpanded(false);
+      setDiscoveryError(null);
+    }
+  }, [channel]);
+
+  const handleDiscover = useCallback(async (expandOnSuccess = false) => {
+    if (channel !== 'evalex') return;
+    const app = String(configRef.current.app ?? 'vizmux');
+    let serverAddress = String(configRef.current.serverAddress ?? '').trim();
+
+    if (!serverAddress) {
+      setDiscoveryError('Server address is required');
+      setDiscoveredCameras([]);
+      return;
+    }
+
+    if (!serverAddress.startsWith('http://') && !serverAddress.startsWith('https://')) {
+      serverAddress = `http://${serverAddress}`;
+    }
+
+    setDiscovering(true);
+    setDiscoveryError(null);
+
+    try {
+      const result = await api.discoverCameras(app, serverAddress);
+      setDiscoveredCameras(result.cameras);
+      if (result.cameras.length === 0) {
+        setDiscoveryError('No cameras found');
+      } else if (expandOnSuccess) {
+        setCamerasExpanded(true);
+      }
+    } catch (err) {
+      setDiscoveryError(
+        err instanceof Error ? err.message : 'Failed to discover cameras. Check server address and ensure the app is running.',
+      );
+      setDiscoveredCameras([]);
+    } finally {
+      setDiscovering(false);
+    }
+  }, [channel]);
+
+  // Memoize selected IDs so the label-sync effect dep is stable across renders
+  const evalexSelectedIds = useMemo(
+    () => (channel === 'evalex' ? savedCameraIds(config) : []),
+    [channel, config],
+  );
+
+  useEffect(() => {
+    if (channel !== 'evalex') return;
+    if (discoveredCameras.length === 0 || evalexSelectedIds.length === 0) return;
+    const labels = savedCameraLabels(configRef.current);
+    let changed = false;
+    const nextLabels = { ...labels };
+    for (const id of evalexSelectedIds) {
+      if (nextLabels[id]) continue;
+      const cam = discoveredCameras.find((c) => c.id === id);
+      if (cam?.name && cam.name !== id) {
+        nextLabels[id] = cam.name;
+        changed = true;
+      }
+    }
+    if (changed) {
+      onChangeRef.current({ ...configRef.current, cameraLabels: nextLabels });
+    }
+  }, [channel, discoveredCameras, evalexSelectedIds]);
+
+  const discoveredNames = useMemo(() => {
+    const names = new Map<string, string>();
+    if (channel !== 'evalex') return names;
+    for (const cam of discoveredCameras) {
+      if (cam.id) names.set(cam.id, cam.name || cam.id);
+    }
+    return names;
+  }, [channel, discoveredCameras]);
 
   if (channel === 'mqtt') {
     return (
@@ -159,85 +246,13 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
   }
 
   if (channel === 'evalex') {
-    const [discovering, setDiscovering] = useState(false);
-    const [discoveryError, setDiscoveryError] = useState<string | null>(null);
-    const [discoveredCameras, setDiscoveredCameras] = useState<Array<{ id: string; name: string }>>([]);
-    const [camerasExpanded, setCamerasExpanded] = useState(false);
-    const selectedIds = savedCameraIds(config);
+    const selectedIds = evalexSelectedIds;
     const cameraLabels = savedCameraLabels(config);
-
-    const handleDiscover = useCallback(async (expandOnSuccess = false) => {
-      const app = String(configRef.current.app ?? 'vizmux');
-      let serverAddress = String(configRef.current.serverAddress ?? '').trim();
-
-      if (!serverAddress) {
-        setDiscoveryError('Server address is required');
-        setDiscoveredCameras([]);
-        return;
-      }
-
-      // Frontend validation: ensure protocol is present
-      if (!serverAddress.startsWith('http://') && !serverAddress.startsWith('https://')) {
-        serverAddress = `http://${serverAddress}`;
-      }
-
-      setDiscovering(true);
-      setDiscoveryError(null);
-
-      try {
-        const result = await api.discoverCameras(app, serverAddress);
-        setDiscoveredCameras(result.cameras);
-        if (result.cameras.length === 0) {
-          setDiscoveryError('No cameras found');
-        } else if (expandOnSuccess) {
-          setCamerasExpanded(true);
-        }
-      } catch (err) {
-        setDiscoveryError(
-          err instanceof Error ? err.message : 'Failed to discover cameras. Check server address and ensure the app is running.',
-        );
-        setDiscoveredCameras([]);
-      } finally {
-        setDiscovering(false);
-      }
-    }, []);
-
-    useEffect(() => {
-      if (discoveredCameras.length === 0 || selectedIds.length === 0) return;
-      const labels = savedCameraLabels(configRef.current);
-      let changed = false;
-      const nextLabels = { ...labels };
-      for (const id of selectedIds) {
-        if (nextLabels[id]) continue;
-        const cam = discoveredCameras.find((c) => c.id === id);
-        if (cam?.name && cam.name !== id) {
-          nextLabels[id] = cam.name;
-          changed = true;
-        }
-      }
-      if (changed) {
-        onChange({ ...configRef.current, cameraLabels: nextLabels });
-      }
-    }, [discoveredCameras, onChange, selectedIds]);
-
-    const discoveredNames = useMemo(() => {
-      const names = new Map<string, string>();
-      for (const cam of discoveredCameras) {
-        if (cam.id) names.set(cam.id, cam.name || cam.id);
-      }
-      return names;
-    }, [discoveredCameras]);
-
     const labelForCamera = (id: string) => cameraLabels[id] || discoveredNames.get(id) || id;
-
-    const selectedCsv = useMemo(
-      () =>
-        selectedIds
-          .map((id) => formatCameraLabel(id, labelForCamera(id)))
-          .filter((name) => name !== 'Unnamed camera')
-          .join(', '),
-      [selectedIds, cameraLabels, discoveredNames],
-    );
+    const selectedCsv = selectedIds
+      .map((id) => formatCameraLabel(id, labelForCamera(id)))
+      .filter((name) => name !== 'Unnamed camera')
+      .join(', ');
 
     const toggleCamera = (cameraId: string, checked: boolean, cameraName?: string) => {
       const current = savedCameraIds(configRef.current);

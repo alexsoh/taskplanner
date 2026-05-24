@@ -1,6 +1,7 @@
 """Database migrations for TaskPlanner."""
 
 import logging
+import sqlite3
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -103,5 +104,52 @@ def migrate_days_of_week_to_array(db: Session) -> None:
     except Exception:
         db.rollback()
         logger.exception("migrate_days_of_week_to_array failed")
+        raise
+
+
+def migrate_drop_day_of_week_column(db: Session) -> None:
+    """Drop the old day_of_week column now that days_of_week JSON array is in use.
+
+    The previous migration added days_of_week but left day_of_week with a NOT NULL
+    constraint and no default, causing every INSERT to fail.  SQLite 3.35+ supports
+    ALTER TABLE … DROP COLUMN.
+    """
+    if not _table_exists(db, "scheduled_actions"):
+        return
+    if not _column_exists(db, "scheduled_actions", "day_of_week"):
+        return  # Already dropped or never existed
+    if not _column_exists(db, "scheduled_actions", "days_of_week"):
+        return  # days_of_week migration hasn't run yet; let it go first
+    try:
+        if sqlite3.sqlite_version_info >= (3, 35, 0):
+            db.execute(text("ALTER TABLE scheduled_actions DROP COLUMN day_of_week"))
+        else:
+            # SQLite < 3.35 does not support DROP COLUMN — rebuild the table without it
+            db.execute(text("""
+                CREATE TABLE scheduled_actions_new (
+                    id VARCHAR(36) NOT NULL PRIMARY KEY,
+                    profile_id VARCHAR(36) NOT NULL
+                        REFERENCES profiles(id) ON DELETE CASCADE,
+                    label VARCHAR(255) NOT NULL DEFAULT 'Action',
+                    days_of_week JSON NOT NULL DEFAULT '[0]',
+                    time VARCHAR(5) NOT NULL,
+                    channel VARCHAR(16) NOT NULL,
+                    enabled BOOLEAN NOT NULL DEFAULT 1,
+                    notification_config JSON NOT NULL DEFAULT '{}'
+                )
+            """))
+            db.execute(text("""
+                INSERT INTO scheduled_actions_new
+                    (id, profile_id, label, days_of_week, time, channel, enabled, notification_config)
+                SELECT id, profile_id, label, days_of_week, time, channel, enabled, notification_config
+                FROM scheduled_actions
+            """))
+            db.execute(text("DROP TABLE scheduled_actions"))
+            db.execute(text("ALTER TABLE scheduled_actions_new RENAME TO scheduled_actions"))
+        db.commit()
+        logger.info("migrate_drop_day_of_week_column completed: dropped day_of_week column")
+    except Exception:
+        db.rollback()
+        logger.exception("migrate_drop_day_of_week_column failed")
         raise
 
