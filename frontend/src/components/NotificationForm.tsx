@@ -168,12 +168,17 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
 
     const handleDiscover = useCallback(async (expandOnSuccess = false) => {
       const app = String(configRef.current.app ?? 'vizmux');
-      const serverAddress = String(configRef.current.serverAddress ?? '').trim();
+      let serverAddress = String(configRef.current.serverAddress ?? '').trim();
 
       if (!serverAddress) {
         setDiscoveryError('Server address is required');
         setDiscoveredCameras([]);
         return;
+      }
+
+      // Frontend validation: ensure protocol is present
+      if (!serverAddress.startsWith('http://') && !serverAddress.startsWith('https://')) {
+        serverAddress = `http://${serverAddress}`;
       }
 
       setDiscovering(true);
@@ -204,6 +209,13 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
         setDiscoveryError(null);
         return;
       }
+      
+      // Also ensure protocol here for automatic discovery
+      let normalizedAddress = serverAddress;
+      if (!normalizedAddress.startsWith('http://') && !normalizedAddress.startsWith('https://')) {
+        normalizedAddress = `http://${normalizedAddress}`;
+      }
+      
       const timer = window.setTimeout(() => {
         void handleDiscover();
       }, 300);

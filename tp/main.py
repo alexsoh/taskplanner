@@ -362,8 +362,12 @@ async def discover_cameras(body: dict):
     """
     import httpx
 
+    logger.debug(f"discover_cameras request body: {body}")
+    
     app = (body.get("app") or "").strip().lower()
     server_address = (body.get("serverAddress") or "").strip()
+
+    logger.debug(f"Parsed app={repr(app)}, serverAddress={repr(server_address)}")
 
     if not app:
         raise HTTPException(400, "app is required (vizmux, piyoai, or vizrec)")
@@ -374,7 +378,14 @@ async def discover_cameras(body: dict):
 
     # Ensure proper URL format
     if not server_address.startswith("http://") and not server_address.startswith("https://"):
+        logger.debug(f"Adding http:// protocol to {server_address}")
         server_address = f"http://{server_address}"
+    
+    # Verify URL is valid (not empty or whitespace after protocol addition)
+    if not server_address or server_address in ("http://", "https://"):
+        raise HTTPException(400, "serverAddress is invalid")
+    
+    logger.debug(f"Final server_address={repr(server_address)}")
 
     try:
         timeout = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
@@ -423,8 +434,16 @@ async def discover_cameras(body: dict):
             f"Error from {app}: {e.status_code}",
         )
     except Exception as e:
+        error_msg = str(e)
+        # Handle UnsupportedProtocol errors
+        if "UnsupportedProtocol" in str(type(e).__name__) or "missing an 'http'" in error_msg:
+            logger.warning(f"Invalid URL format: {server_address}")
+            raise HTTPException(
+                400,
+                f"Invalid server address format. Please use http://hostname:port or https://hostname:port",
+            )
         logger.exception(f"Error discovering cameras from {app}")
-        raise HTTPException(500, f"Error discovering cameras: {str(e)}")
+        raise HTTPException(500, f"Error discovering cameras: {error_msg}")
 
 
 # --- Calendar & executions ---
