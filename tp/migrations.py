@@ -107,6 +107,42 @@ def migrate_days_of_week_to_array(db: Session) -> None:
         raise
 
 
+def migrate_add_execution_run_unique_index(db: Session) -> None:
+    """Add unique index on execution_runs(scheduled_action_id, scheduled_for) to prevent duplicate slots."""
+    if not _table_exists(db, "execution_runs"):
+        return
+    existing = db.execute(
+        text("SELECT name FROM sqlite_master WHERE type='index' AND name='uq_execution_run_action_slot'"),
+    ).fetchall()
+    if existing:
+        return
+    try:
+        # Deduplicate rows before applying the unique constraint: keep the last-inserted
+        # row per (scheduled_action_id, scheduled_for) pair.  Old code had only in-memory
+        # deduplication, so restarts within the same minute could produce duplicates.
+        db.execute(text("""
+            DELETE FROM execution_runs
+            WHERE scheduled_action_id IS NOT NULL
+              AND rowid NOT IN (
+                SELECT MAX(rowid)
+                FROM execution_runs
+                WHERE scheduled_action_id IS NOT NULL
+                GROUP BY scheduled_action_id, scheduled_for
+              )
+        """))
+        db.commit()
+        db.execute(text(
+            "CREATE UNIQUE INDEX uq_execution_run_action_slot "
+            "ON execution_runs(scheduled_action_id, scheduled_for)"
+        ))
+        db.commit()
+        logger.info("migrate_add_execution_run_unique_index: unique index created")
+    except Exception:
+        db.rollback()
+        logger.exception("migrate_add_execution_run_unique_index failed")
+        raise
+
+
 def migrate_ensure_single_active_profile(db: Session) -> None:
     """If multiple profiles are enabled (legacy bug), keep only the oldest active."""
     if not _table_exists(db, "profiles"):

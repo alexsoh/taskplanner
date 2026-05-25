@@ -25,7 +25,7 @@ mqtt = MqttClient()
 telegram = TelegramNotifier()
 http_notifier = HttpNotifier()
 nvr_notifier = NvrNotifier()
-_notify_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="taskplanner-notify")
+_notify_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="taskplanner-notify")
 
 _mqtt_settings: Optional[MqttSettings] = None
 _telegram_settings: Optional[TelegramSettings] = None
@@ -44,6 +44,9 @@ def _set_profile_enabled_sync(profile_id: str, enabled: bool) -> None:
         p.enabled = enabled
         db.commit()
         logger.info("Profile listener: %s profile '%s'", "enabled" if enabled else "disabled", p.name)
+        if enabled:
+            from .scheduler import dispatch_profile_activation_catchup
+            dispatch_profile_activation_catchup(profile_id)
     except Exception:
         db.rollback()
         logger.error("Profile listener: failed to update profile %s", profile_id, exc_info=True)

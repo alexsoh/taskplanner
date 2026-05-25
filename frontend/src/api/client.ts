@@ -173,6 +173,10 @@ export async function getVersion(): Promise<{ version: string }> {
   return json(await fetch(`${getApiBase()}/api/version`));
 }
 
+export async function getHealth(): Promise<{ ok: boolean; version?: string; server_timezone?: string }> {
+  return json(await fetch(`${getApiBase()}/api/health`));
+}
+
 /** Check for updates; empty token uses the saved download token on the server (PiyoAI-style). */
 export async function checkForUpdate(token = ''): Promise<UpdateCheckResponse> {
   const resp = await fetch(`${getApiBase()}/api/update/check`, {

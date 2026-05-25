@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, JSON
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, JSON
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from typing import TYPE_CHECKING
 
@@ -58,6 +58,9 @@ class ScheduledAction(Base):
 
 class ExecutionRun(Base):
     __tablename__ = "execution_runs"
+    __table_args__ = (
+        Index("uq_execution_run_action_slot", "scheduled_action_id", "scheduled_for", unique=True),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     scheduled_action_id: Mapped[Optional[str]] = mapped_column(

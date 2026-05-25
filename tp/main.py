@@ -28,10 +28,12 @@ from .schemas import (
     ProfileCreate,
     ProfileOut,
     ProfileUpdate,
+    ServerInfoOut,
     SettingsOut,
     SettingsUpdate,
 )
-from .scheduler import scheduler_loop
+from .scheduler import dispatch_profile_activation_catchup, scheduler_loop
+from .tzutil import format_server_local, server_timezone_name
 from .settings_store import (
     load_mqtt_telegram,
     settings_to_api,
@@ -134,7 +136,16 @@ async def apply_ip_filter(request: Request, call_next):
 def health():
     from . import __version__
 
-    return {"ok": True, "version": __version__}
+    return {
+        "ok": True,
+        "version": __version__,
+        "server_timezone": server_timezone_name(),
+    }
+
+
+@app.get("/api/server-info", response_model=ServerInfoOut)
+def server_info():
+    return ServerInfoOut(server_timezone=server_timezone_name())
 
 
 @app.get("/api/logs/{filename}")
@@ -202,12 +213,15 @@ def update_profile(profile_id: str, body: ProfileUpdate, db: Session = Depends(g
     p = db.get(Profile, profile_id)
     if not p:
         raise HTTPException(404, "Profile not found")
+    was_enabled = p.enabled
     if body.enabled is True:
         db.query(Profile).filter(Profile.id != profile_id).update({"enabled": False})
     for field, val in body.model_dump(exclude_unset=True).items():
         setattr(p, field, val)
     db.commit()
     db.refresh(p)
+    if body.enabled is True and not was_enabled:
+        dispatch_profile_activation_catchup(profile_id)
     return p
 
 
@@ -533,7 +547,24 @@ def list_executions(
         q = q.filter(ExecutionRun.fired_at <= to_dt)
     if profile_id:
         q = q.filter(ExecutionRun.profile_id == profile_id)
-    return q.limit(limit).all()
+    rows = q.limit(limit).all()
+    return [
+        ExecutionOut(
+            id=r.id,
+            scheduled_action_id=r.scheduled_action_id,
+            profile_id=r.profile_id,
+            scheduled_for=r.scheduled_for,
+            fired_at=r.fired_at,
+            scheduled_for_local=format_server_local(r.scheduled_for),
+            fired_at_local=format_server_local(r.fired_at),
+            status=r.status,
+            error=r.error,
+            channel=r.channel,
+            label=r.label,
+            detail=r.detail,
+        )
+        for r in rows
+    ]
 
 
 # --- Update ---

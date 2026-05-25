@@ -115,6 +115,8 @@ class ExecutionOut(BaseModel):
     profile_id: Optional[str]
     scheduled_for: datetime
     fired_at: datetime
+    scheduled_for_local: str = ""
+    fired_at_local: str = ""
     status: str
     error: Optional[str]
     channel: str
@@ -122,6 +124,11 @@ class ExecutionOut(BaseModel):
     detail: Optional[Dict[str, Any]]
 
     model_config = {"from_attributes": True}
+
+
+class ServerInfoOut(BaseModel):
+    ok: bool = True
+    server_timezone: str
 
 
 class CalendarEvent(BaseModel):

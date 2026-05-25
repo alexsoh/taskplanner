@@ -146,11 +146,18 @@ export interface ExecutionRun {
   profile_id: string | null;
   scheduled_for: string;
   fired_at: string;
+  scheduled_for_local: string;
+  fired_at_local: string;
   status: string;
   error: string | null;
   channel: string;
   label: string;
   detail: Record<string, unknown> | null;
+}
+
+export interface ServerInfo {
+  ok: boolean;
+  server_timezone: string;
 }
 
 export interface CalendarEvent {

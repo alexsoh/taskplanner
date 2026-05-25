@@ -9,14 +9,27 @@ type Props = {
   onSelectProfile: (id: string | null) => void;
 };
 
+function statusClass(status: string): string {
+  if (status === 'success') return 'text-success';
+  if (status === 'running') return 'text-text-secondary';
+  return 'text-error';
+}
+
 export default function HistoryPage({ profiles, selectedId, onSelectProfile }: Props) {
   const [runs, setRuns] = useState<ExecutionRun[]>([]);
   const [profileFilter, setProfileFilter] = useState(selectedId ?? '');
+  const [serverTimezone, setServerTimezone] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
     setProfileFilter(selectedId ?? '');
   }, [selectedId]);
+
+  useEffect(() => {
+    api.getHealth().then((h) => {
+      if (h.server_timezone) setServerTimezone(h.server_timezone);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const params: { profile_id?: string; limit?: number } = { limit: 200 };
@@ -35,6 +48,11 @@ export default function HistoryPage({ profiles, selectedId, onSelectProfile }: P
     <div className="space-y-6">
       <div className="space-y-3">
         <h2 className="text-2xl font-bold text-text-primary">Execution History</h2>
+        {serverTimezone && (
+          <p className="text-xs text-text-muted">
+            Times shown in server timezone ({serverTimezone})
+          </p>
+        )}
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-text-secondary">Profile:</label>
           <select
@@ -62,10 +80,15 @@ export default function HistoryPage({ profiles, selectedId, onSelectProfile }: P
               key={r.id}
               className="p-3 rounded-lg border border-border bg-bg-secondary text-sm flex flex-wrap gap-x-4 gap-y-1"
             >
-              <span className={`font-medium ${r.status === 'success' ? 'text-success' : 'text-error'}`}>
+              <span className={`font-medium ${statusClass(r.status)}`}>
                 {r.status}
               </span>
-              <span className="text-text-muted">{new Date(r.fired_at).toLocaleString()}</span>
+              <span className="text-text-muted" title="Scheduled for">
+                sched {r.scheduled_for_local || r.scheduled_for}
+              </span>
+              <span className="text-text-muted" title="Fired at">
+                fired {r.fired_at_local || r.fired_at}
+              </span>
               <span>{profileName(r.profile_id)}</span>
               <span style={{ color: CHANNEL_COLORS[r.channel] ?? undefined }}>{r.channel}</span>
               <span className="flex-1 min-w-0 truncate">{r.label}</span>

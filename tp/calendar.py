@@ -5,25 +5,12 @@ from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
-from .models import Profile, ScheduledAction
+from .models import ScheduledAction
+from .schedule_occurrences import expand_occurrences
 from .schemas import CalendarEvent
 from .tzutil import profile_timezone
 
 logger = logging.getLogger("taskplanner.calendar")
-
-
-def _parse_hhmm(s: str) -> time | None:
-    parts = (s or "00:00").strip().split(":")
-    if len(parts) < 2:
-        return None
-    try:
-        h = int(parts[0])
-        m = int(parts[1])
-    except ValueError:
-        return None
-    if not (0 <= h <= 23 and 0 <= m <= 59):
-        return None
-    return time(hour=h, minute=m)
 
 
 def expand_calendar(
@@ -35,64 +22,44 @@ def expand_calendar(
     if to_date < from_date:
         return []
 
-    q = (
-        db.query(ScheduledAction, Profile)
-        .join(Profile, ScheduledAction.profile_id == Profile.id)
-        .filter(ScheduledAction.enabled.is_(True), Profile.enabled.is_(True))
-    )
-    if profile_id:
-        q = q.filter(Profile.id == profile_id)
+    since_utc = datetime.combine(from_date, time.min, tzinfo=timezone.utc)
+    until_utc = datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=timezone.utc)
 
-    rows = q.all()
+    action_count = (
+        db.query(ScheduledAction)
+        .filter(ScheduledAction.enabled.is_(True))
+        .count()
+    )
     logger.info(
         "calendar query profile_id=%s actions=%d range=%s..%s",
         profile_id or "(all)",
-        len(rows),
+        action_count,
         from_date,
         to_date,
     )
 
+    slots = expand_occurrences(db, since_utc, until_utc, profile_id)
     events: list[CalendarEvent] = []
-    skipped_bad_time = 0
-    cur = from_date
-    while cur <= to_date:
-        dow = cur.weekday()
-        for action, profile in rows:
-            if dow not in action.days_of_week:
-                continue
-            action_time = _parse_hhmm(action.time)
-            if action_time is None:
-                skipped_bad_time += 1
-                logger.warning(
-                    "calendar skip action=%s channel=%s bad time=%r",
-                    action.id,
-                    action.channel,
-                    action.time,
-                )
-                continue
-            tz = profile_timezone(profile.timezone)
-            local_dt = datetime.combine(cur, action_time, tzinfo=tz)
-            occurrence_utc = local_dt.astimezone(timezone.utc)
-            events.append(
-                CalendarEvent(
-                    action_id=action.id,
-                    profile_id=profile.id,
-                    profile_name=profile.name,
-                    profile_color=(profile.color or "#38bdf8"),
-                    label=action.label,
-                    channel=action.channel,
-                    day_of_week=dow,
-                    time=action.time,
-                    occurrence_utc=occurrence_utc,
-                )
+    for action, profile, occurrence_utc in slots:
+        tz = profile_timezone(profile.timezone)
+        local = occurrence_utc.astimezone(tz)
+        events.append(
+            CalendarEvent(
+                action_id=action.id,
+                profile_id=profile.id,
+                profile_name=profile.name,
+                profile_color=(profile.color or "#38bdf8"),
+                label=action.label,
+                channel=action.channel,
+                day_of_week=local.weekday(),
+                time=action.time,
+                occurrence_utc=occurrence_utc,
             )
-        cur += timedelta(days=1)
+        )
 
-    events.sort(key=lambda e: e.occurrence_utc)
     logger.info(
-        "calendar result profile_id=%s events=%d skipped_bad_time=%d",
+        "calendar result profile_id=%s events=%d skipped_bad_time=0",
         profile_id or "(all)",
         len(events),
-        skipped_bad_time,
     )
     return events

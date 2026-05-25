@@ -33,6 +33,7 @@ _migrations_applied = False
 
 def run_migrations(db: Session) -> None:
     from .migrations import (
+        migrate_add_execution_run_unique_index,
         migrate_add_ip_whitelist_and_port,
         migrate_add_profile_color,
         migrate_add_upgrade_columns,
@@ -47,6 +48,7 @@ def run_migrations(db: Session) -> None:
     migrate_days_of_week_to_array(db)
     migrate_drop_day_of_week_column(db)
     migrate_ensure_single_active_profile(db)
+    migrate_add_execution_run_unique_index(db)
 
 
 def ensure_migrations(db: Session) -> None:
