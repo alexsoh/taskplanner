@@ -149,6 +149,49 @@ def test_find_missed_latest_only():
         db.close()
 
 
+def test_catch_up_skips_older_occurrences():
+    """Only the latest missed occurrence fires; older ones get status=skipped immediately."""
+    db = SessionLocal()
+    try:
+        _, actions = _seed_profile_with_actions(
+            db,
+            actions=[{"time": "09:00", "days_of_week": [0, 2, 4], "label": "A"}],
+        )
+        action = actions[0]
+        # 2026-05-22 is Friday; Mon=18, Wed=20, Fri=22 all missed
+        now = datetime(2026, 5, 22, 10, 0, tzinfo=timezone.utc)
+
+        result = find_missed_occurrences(db, now)
+
+        # Only the latest (Friday) should be returned for execution
+        assert len(result) == 1
+        assert result[0][2] == datetime(2026, 5, 22, 9, 0, tzinfo=timezone.utc)
+
+        # Monday and Wednesday must have skipped records
+        mon = datetime(2026, 5, 18, 9, 0, tzinfo=timezone.utc)
+        wed = datetime(2026, 5, 20, 9, 0, tzinfo=timezone.utc)
+        mon_run = db.query(ExecutionRun).filter(
+            ExecutionRun.scheduled_action_id == action.id,
+            ExecutionRun.scheduled_for == mon,
+        ).one_or_none()
+        wed_run = db.query(ExecutionRun).filter(
+            ExecutionRun.scheduled_action_id == action.id,
+            ExecutionRun.scheduled_for == wed,
+        ).one_or_none()
+        assert mon_run is not None and mon_run.status == "skipped"
+        assert wed_run is not None and wed_run.status == "skipped"
+
+        # Simulate enqueue claiming the Friday slot
+        profile = db.get(Profile, action.profile_id)
+        fri = datetime(2026, 5, 22, 9, 0, tzinfo=timezone.utc)
+        try_claim_slot(db, action, profile, fri)
+
+        # Now a subsequent find must return nothing — no double-fire
+        assert find_missed_occurrences(db, now) == []
+    finally:
+        db.close()
+
+
 def test_try_claim_slot_dedupes():
     db = SessionLocal()
     try:

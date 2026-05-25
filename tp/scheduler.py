@@ -72,7 +72,12 @@ def find_missed_occurrences(db: Session, now_utc: datetime | None = None) -> lis
         slot for slot in candidates
         if not has_execution_for_slot(db, slot[0].id, slot[2])
     ]
-    return collapse_to_latest_missed_per_action(unrun)
+    to_run = collapse_to_latest_missed_per_action(unrun)
+    to_run_keys = {(s[0].id, s[2]) for s in to_run}
+    to_skip = [s for s in unrun if (s[0].id, s[2]) not in to_run_keys]
+    if to_skip:
+        _mark_slots_skipped(db, to_skip)
+    return to_run
 
 
 def find_missed_for_profile_on_activation(
@@ -94,7 +99,12 @@ def find_missed_for_profile_on_activation(
         slot for slot in candidates
         if slot[2] < until_utc and not has_execution_for_slot(db, slot[0].id, slot[2])
     ]
-    return collapse_to_latest_missed_per_action(unrun)
+    to_run = collapse_to_latest_missed_per_action(unrun)
+    to_run_keys = {(s[0].id, s[2]) for s in to_run}
+    to_skip = [s for s in unrun if (s[0].id, s[2]) not in to_run_keys]
+    if to_skip:
+        _mark_slots_skipped(db, to_skip)
+    return to_run
 
 
 def _dedupe_slots(slots: list[Slot]) -> list[Slot]:
@@ -107,6 +117,27 @@ def _dedupe_slots(slots: list[Slot]) -> list[Slot]:
         seen.add(key)
         out.append(slot)
     return out
+
+
+def _mark_slots_skipped(db: Session, slots: list[Slot]) -> None:
+    for action, profile, scheduled_for in slots:
+        sf = scheduled_for.astimezone(timezone.utc).replace(second=0, microsecond=0)
+        run = ExecutionRun(
+            scheduled_action_id=action.id,
+            profile_id=profile.id,
+            scheduled_for=sf,
+            fired_at=datetime.now(timezone.utc),
+            status="skipped",
+            error=None,
+            channel=action.channel,
+            label=action.label,
+            detail=None,
+        )
+        db.add(run)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
 
 
 def try_claim_slot(
