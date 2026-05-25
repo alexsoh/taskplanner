@@ -24,9 +24,13 @@ logger = logging.getLogger("taskplanner.updater")
 APP_SLUG = "taskplanner"
 
 
-def _parse_version(v: str) -> tuple[int, ...]:
-    """Convert 'v1.2.3' or '1.2.3' to (1, 2, 3) for comparison."""
-    return tuple(int(x) for x in v.lstrip("v").split(".") if x.isdigit())
+def _parse_version(v: str) -> tuple[int, int, int]:
+    """Convert 'v1.2.3' or '1.2.3' to (1, 2, 3) for comparison. Returns (0, 0, 0) for invalid."""
+    parts = [x for x in v.lstrip("v").split(".") if x.isdigit()]
+    if not parts:
+        return (0, 0, 0)
+    padded = (parts + ["0", "0"])[:3]
+    return (int(padded[0]), int(padded[1]), int(padded[2]))
 
 
 def _normalize_latest_tag(raw: str) -> str:

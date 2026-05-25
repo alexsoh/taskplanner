@@ -150,43 +150,41 @@ def test_find_missed_latest_only():
 
 
 def test_catch_up_skips_older_occurrences():
-    """Only the latest missed occurrence fires; older ones get status=skipped immediately."""
+    """Within today, only the latest missed slot per channel fires; earlier ones get skipped."""
     db = SessionLocal()
     try:
-        _, actions = _seed_profile_with_actions(
+        # Two actions on the same channel scheduled at 00:00 and 06:00 today (Monday)
+        p, actions = _seed_profile_with_actions(
             db,
-            actions=[{"time": "09:00", "days_of_week": [0, 2, 4], "label": "A"}],
+            actions=[
+                {"time": "00:00", "days_of_week": [0], "label": "Early", "channel": "http"},
+                {"time": "06:00", "days_of_week": [0], "label": "Late", "channel": "http"},
+            ],
         )
-        action = actions[0]
-        # 2026-05-22 is Friday; Mon=18, Wed=20, Fri=22 all missed
-        now = datetime(2026, 5, 22, 10, 0, tzinfo=timezone.utc)
+        early_action, late_action = actions
+        # 2026-05-18 is Monday; both 00:00 and 06:00 are missed by 10:00
+        now = datetime(2026, 5, 18, 10, 0, tzinfo=timezone.utc)
 
         result = find_missed_occurrences(db, now)
 
-        # Only the latest (Friday) should be returned for execution
+        # Only the latest http slot (06:00) should be returned
         assert len(result) == 1
-        assert result[0][2] == datetime(2026, 5, 22, 9, 0, tzinfo=timezone.utc)
+        assert result[0][2] == datetime(2026, 5, 18, 6, 0, tzinfo=timezone.utc)
+        assert result[0][0].label == "Late"
 
-        # Monday and Wednesday must have skipped records
-        mon = datetime(2026, 5, 18, 9, 0, tzinfo=timezone.utc)
-        wed = datetime(2026, 5, 20, 9, 0, tzinfo=timezone.utc)
-        mon_run = db.query(ExecutionRun).filter(
-            ExecutionRun.scheduled_action_id == action.id,
-            ExecutionRun.scheduled_for == mon,
+        # The 00:00 slot must have a skipped record
+        early_slot = datetime(2026, 5, 18, 0, 0, tzinfo=timezone.utc)
+        early_run = db.query(ExecutionRun).filter(
+            ExecutionRun.scheduled_action_id == early_action.id,
+            ExecutionRun.scheduled_for == early_slot,
         ).one_or_none()
-        wed_run = db.query(ExecutionRun).filter(
-            ExecutionRun.scheduled_action_id == action.id,
-            ExecutionRun.scheduled_for == wed,
-        ).one_or_none()
-        assert mon_run is not None and mon_run.status == "skipped"
-        assert wed_run is not None and wed_run.status == "skipped"
+        assert early_run is not None and early_run.status == "skipped"
 
-        # Simulate enqueue claiming the Friday slot
-        profile = db.get(Profile, action.profile_id)
-        fri = datetime(2026, 5, 22, 9, 0, tzinfo=timezone.utc)
-        try_claim_slot(db, action, profile, fri)
+        # Simulate enqueue claiming the 06:00 slot
+        profile = db.get(Profile, late_action.profile_id)
+        try_claim_slot(db, late_action, profile, datetime(2026, 5, 18, 6, 0, tzinfo=timezone.utc))
 
-        # Now a subsequent find must return nothing — no double-fire
+        # Subsequent find must return nothing — no double-fire
         assert find_missed_occurrences(db, now) == []
     finally:
         db.close()
@@ -227,22 +225,22 @@ def test_profile_activation_catchup_latest_same_day():
         db.close()
 
 
-def test_profile_activation_two_actions():
+def test_profile_activation_two_actions_same_channel():
+    """Two actions on the same channel — only the latest missed one fires on activation."""
     db = SessionLocal()
     try:
         p, _ = _seed_profile_with_actions(
             db,
             enabled=False,
             actions=[
-                {"time": "00:00", "days_of_week": [0], "label": "A"},
-                {"time": "06:00", "days_of_week": [0], "label": "B"},
+                {"time": "00:00", "days_of_week": [0], "label": "A", "channel": "http"},
+                {"time": "06:00", "days_of_week": [0], "label": "B", "channel": "http"},
             ],
         )
         activated_at = datetime(2026, 5, 18, 10, 0, tzinfo=timezone.utc)
         missed = find_missed_for_profile_on_activation(db, p, activated_at)
-        assert len(missed) == 2
-        hours = sorted(m[2].hour for m in missed)
-        assert hours == [0, 6]
+        assert len(missed) == 1
+        assert missed[0][2].hour == 6
     finally:
         db.close()
 

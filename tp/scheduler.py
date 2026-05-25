@@ -55,6 +55,17 @@ def collapse_to_latest_missed_per_action(candidates: list[Slot]) -> list[Slot]:
     return list(best.values())
 
 
+def _collapse_to_latest_per_channel(candidates: list[Slot]) -> list[Slot]:
+    """Return the latest missed slot per channel (e.g. evalex, mqtt, telegram)."""
+    best: dict[str, Slot] = {}
+    for action, profile, scheduled_for in candidates:
+        channel = action.channel
+        prev = best.get(channel)
+        if prev is None or scheduled_for > prev[2]:
+            best[channel] = (action, profile, scheduled_for)
+    return list(best.values())
+
+
 def find_due_actions(
     db: Session, now_utc: datetime | None = None,
 ) -> list[Slot]:
@@ -66,13 +77,13 @@ def find_due_actions(
 
 def find_missed_occurrences(db: Session, now_utc: datetime | None = None) -> list[Slot]:
     now_utc = (now_utc or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    since = now_utc - timedelta(days=MAX_LOOKBACK_DAYS)
+    since = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
     candidates = expand_occurrences(db, since, now_utc)
     unrun = [
         slot for slot in candidates
         if not has_execution_for_slot(db, slot[0].id, slot[2])
     ]
-    to_run = collapse_to_latest_missed_per_action(unrun)
+    to_run = _collapse_to_latest_per_channel(unrun)
     to_run_keys = {(s[0].id, s[2]) for s in to_run}
     to_skip = [s for s in unrun if (s[0].id, s[2]) not in to_run_keys]
     if to_skip:
@@ -99,7 +110,7 @@ def find_missed_for_profile_on_activation(
         slot for slot in candidates
         if slot[2] < until_utc and not has_execution_for_slot(db, slot[0].id, slot[2])
     ]
-    to_run = collapse_to_latest_missed_per_action(unrun)
+    to_run = _collapse_to_latest_per_channel(unrun)
     to_run_keys = {(s[0].id, s[2]) for s in to_run}
     to_skip = [s for s in unrun if (s[0].id, s[2]) not in to_run_keys]
     if to_skip:
@@ -330,8 +341,7 @@ async def catch_up_missed(now_utc: datetime | None = None) -> None:
         missed = find_missed_occurrences(db, now_utc)
         enqueued = enqueue_slots(missed, reason="catch-up")
         logger.info(
-            "catch-up starting lookback_days=%d enqueued=%d candidates=%d",
-            MAX_LOOKBACK_DAYS,
+            "catch-up today-only enqueued=%d candidates=%d",
             enqueued,
             len(missed),
         )

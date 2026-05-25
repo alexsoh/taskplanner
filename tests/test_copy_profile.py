@@ -69,20 +69,22 @@ def test_normalize_evalex_config_dict_camera_ids():
     assert normalized["cameraIds"] == ["cam-1", "cam-2"]
 
 
-@pytest.mark.asyncio
-async def test_reconcile_evalex_config_filters_stale_ids():
+def test_reconcile_evalex_config_filters_stale_ids():
     """Test that reconcile filters out IDs not in live settings."""
-    config = {
-        "app": "vizmux",
-        "serverAddress": "http://invalid-host-that-wont-resolve:9999",
-        "cameraIds": ["cam-1", "cam-2"],
-        "action": "enable",
-    }
-    # This will hit an unreachable server, so stale_removed will be empty and unreachable=True
-    # We can't actually test the filtering without mocking httpx, but we can verify the structure
-    reconciled, metadata = await reconcile_evalex_config(config)
-    assert "stale_removed" in metadata
-    assert "unreachable" in metadata
+    async def _run():
+        config = {
+            "app": "vizmux",
+            "serverAddress": "http://invalid-host-that-wont-resolve:9999",
+            "cameraIds": ["cam-1", "cam-2"],
+            "action": "enable",
+        }
+        # This will hit an unreachable server, so stale_removed will be empty and unreachable=True
+        # We can't actually test the filtering without mocking httpx, but we can verify the structure
+        reconciled, metadata = await reconcile_evalex_config(config)
+        assert "stale_removed" in metadata
+        assert "unreachable" in metadata
+
+    asyncio.run(_run())
 
 
 def test_copy_profile_deep_copies_notification_config():
