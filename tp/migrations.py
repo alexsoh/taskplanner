@@ -107,6 +107,27 @@ def migrate_days_of_week_to_array(db: Session) -> None:
         raise
 
 
+def migrate_ensure_single_active_profile(db: Session) -> None:
+    """If multiple profiles are enabled (legacy bug), keep only the oldest active."""
+    if not _table_exists(db, "profiles"):
+        return
+    rows = db.execute(
+        text("SELECT id FROM profiles WHERE enabled = 1 ORDER BY created_at, id"),
+    ).fetchall()
+    if len(rows) <= 1:
+        return
+    keeper_id = rows[0][0]
+    db.execute(
+        text("UPDATE profiles SET enabled = 0 WHERE enabled = 1 AND id != :id"),
+        {"id": keeper_id},
+    )
+    db.commit()
+    logger.info(
+        "migrate_ensure_single_active_profile: disabled %d extra active profile(s)",
+        len(rows) - 1,
+    )
+
+
 def migrate_drop_day_of_week_column(db: Session) -> None:
     """Drop the old day_of_week column now that days_of_week JSON array is in use.
 

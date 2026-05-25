@@ -28,7 +28,7 @@ class Profile(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     name: Mapped[str] = mapped_column(String(255), nullable=False, default="Profile")
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     color: Mapped[str] = mapped_column(String(16), nullable=False, default="#38bdf8")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 

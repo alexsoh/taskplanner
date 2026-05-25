@@ -9,7 +9,7 @@ Channel = Literal["mqtt", "telegram", "http", "script", "nvr", "evalex"]
 class ProfileCreate(BaseModel):
     name: str = "Profile"
     timezone: str = "UTC"
-    enabled: bool = True
+    enabled: bool = False
     color: str = "#38bdf8"
 
 

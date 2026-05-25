@@ -175,6 +175,8 @@ def list_profiles(db: Session = Depends(get_db)):
 
 @app.post("/api/profiles", response_model=ProfileOut)
 def create_profile(body: ProfileCreate, db: Session = Depends(get_db)):
+    if body.enabled is True:
+        db.query(Profile).update({"enabled": False})
     p = Profile(
         name=body.name,
         timezone=body.timezone,
@@ -225,14 +227,14 @@ async def copy_profile(profile_id: str, body: ProfileUpdate, db: Session = Depen
     if not source:
         raise HTTPException(404, "Profile not found")
 
-    new_enabled = body.enabled if body.enabled is not None else source.enabled
+    new_enabled = body.enabled if body.enabled is not None else False
     new_profile = Profile(
         name=body.name if body.name is not None else source.name,
         timezone=body.timezone if body.timezone is not None else source.timezone,
         enabled=new_enabled,
         color=body.color if body.color is not None else source.color,
     )
-    if new_enabled:
+    if new_enabled is True:
         db.query(Profile).update({"enabled": False})
     db.add(new_profile)
     db.flush()

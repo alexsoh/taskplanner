@@ -5,6 +5,7 @@ from collections.abc import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from . import APP_DIR
 from .models import Base
@@ -15,13 +16,15 @@ DATA_DIR = APP_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 if os.environ.get("TASKPLANNER_TEST_DB") == "memory":
     DATABASE_URL = "sqlite:///:memory:"
+    _engine_kwargs = {
+        "connect_args": {"check_same_thread": False},
+        "poolclass": StaticPool,
+    }
 else:
     DATABASE_URL = f"sqlite:///{DATA_DIR / 'taskplanner.db'}"
+    _engine_kwargs = {"connect_args": {"check_same_thread": False}}
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},
-)
+engine = create_engine(DATABASE_URL, **_engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 _migration_lock = threading.Lock()
@@ -35,6 +38,7 @@ def run_migrations(db: Session) -> None:
         migrate_add_upgrade_columns,
         migrate_days_of_week_to_array,
         migrate_drop_day_of_week_column,
+        migrate_ensure_single_active_profile,
     )
 
     migrate_add_upgrade_columns(db)
@@ -42,6 +46,7 @@ def run_migrations(db: Session) -> None:
     migrate_add_profile_color(db)
     migrate_days_of_week_to_array(db)
     migrate_drop_day_of_week_column(db)
+    migrate_ensure_single_active_profile(db)
 
 
 def ensure_migrations(db: Session) -> None:
