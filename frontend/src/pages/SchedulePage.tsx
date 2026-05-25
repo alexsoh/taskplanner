@@ -47,6 +47,13 @@ export default function SchedulePage({
     api.getSettings().then((s) => setMqttSettings(s.mqtt)).catch(() => {});
   }, []);
 
+  // Clear editor state when profile changes
+  useEffect(() => {
+    setEditing(null);
+    setDraft(null);
+    setTestMsg('');
+  }, [selectedId]);
+
   const profile = profiles.find((p) => p.id === selectedId) ?? null;
   const profileTimezoneLabel = profile ? formatProfileTimezone(profile.timezone) : '';
   const browserTz = browserTimezone();

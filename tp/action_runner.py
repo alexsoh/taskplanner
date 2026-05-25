@@ -167,7 +167,9 @@ async def run_scheduled_action(
             raise ActionRunError("Evalex camera IDs list is empty")
         result_dict = await send_evalex_notification(test_notif, result, logger)
         if result_dict.get("status") == "error":
-            raise ActionRunError(f"Evalex error: {result_dict.get('error')}", detail=result_dict)
+            # Surface top-level error if set, otherwise use first error from list
+            error_msg = result_dict.get("error") or (result_dict.get("errors") or ["Evalex failed"])[0]
+            raise ActionRunError(f"Evalex error: {error_msg}", detail=result_dict)
         return result_dict
     else:
         raise ActionRunError(f"Unknown channel: {channel}")

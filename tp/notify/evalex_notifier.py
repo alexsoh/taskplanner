@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -71,7 +72,9 @@ async def send_notification(
                 continue
 
             try:
-                url = f"{server_address}/api/cameras/{camera_id}/enabled"
+                # URL-encode camera_id to prevent injection/corruption
+                encoded_id = quote(camera_id, safe="")
+                url = f"{server_address}/api/cameras/{encoded_id}/enabled"
                 logger_.debug(f"Calling {url} with enabled={enabled_value}")
 
                 response = await client.post(url, json={"enabled": enabled_value})
@@ -94,7 +97,8 @@ async def send_notification(
                 logger_.warning(f"Evalex: HTTP error for {camera_id}: {error_msg}")
 
             except (httpx.RequestError, httpx.TimeoutException) as e:
-                error_msg = f"Request failed: {str(e)}"
+                # Provide richer error info with URL and exception type
+                error_msg = f"Request failed: {type(e).__name__}: {str(e) or repr(e)} (URL: {url})"
                 results["cameras"][camera_id] = {"status": "error", "error": error_msg}
                 errors.append(f"{camera_id}: {error_msg}")
                 logger_.warning(f"Evalex: Request error for {camera_id}: {error_msg}")
@@ -109,5 +113,7 @@ async def send_notification(
         results["errors"] = errors
         if all(cam_result.get("status") == "error" for cam_result in results["cameras"].values()):
             results["status"] = "error"
+            # Set top-level error for easier surfacing
+            results["error"] = errors[0] if errors else "All cameras failed"
 
     return results

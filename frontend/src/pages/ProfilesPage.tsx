@@ -56,8 +56,10 @@ export default function ProfilesPage({
 
   const doCopy = async (p: Profile) => {
     try {
-      await api.copyProfile(p.id, { name: `${p.name} (Copy)` });
+      const copied = await api.copyProfile(p.id, { name: `${p.name} (Copy)` });
       onProfilesChange();
+      // Select and open the new profile's schedules
+      onSelectAndOpenSchedule(copied.id);
     } catch (e) {
       setError(String(e));
     }

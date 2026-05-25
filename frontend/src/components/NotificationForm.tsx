@@ -61,15 +61,6 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
   const [discoveredCameras, setDiscoveredCameras] = useState<Array<{ id: string; name: string }>>([]);
   const [camerasExpanded, setCamerasExpanded] = useState(false);
 
-  // Reset evalex discovery state when switching away from the evalex channel
-  useEffect(() => {
-    if (channel !== 'evalex') {
-      setDiscoveredCameras([]);
-      setCamerasExpanded(false);
-      setDiscoveryError(null);
-    }
-  }, [channel]);
-
   const handleDiscover = useCallback(async (expandOnSuccess = false) => {
     if (channel !== 'evalex') return;
     const app = String(configRef.current.app ?? 'vizmux');
@@ -105,6 +96,22 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
       setDiscovering(false);
     }
   }, [channel]);
+
+  // Reset evalex discovery state when switching away from the evalex channel
+  useEffect(() => {
+    if (channel !== 'evalex') {
+      setDiscoveredCameras([]);
+      setCamerasExpanded(false);
+      setDiscoveryError(null);
+    }
+  }, [channel]);
+
+  // Auto-discover once when opening evalex form with serverAddress
+  useEffect(() => {
+    if (channel !== 'evalex') return;
+    if (!String(config.serverAddress ?? '').trim()) return;
+    void handleDiscover(false);
+  }, [channel, config.serverAddress, handleDiscover]);
 
   // Memoize selected IDs so the label-sync effect dep is stable across renders
   const evalexSelectedIds = useMemo(
@@ -253,6 +260,11 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
       .map((id) => formatCameraLabel(id, labelForCamera(id)))
       .filter((name) => name !== 'Unnamed camera')
       .join(', ');
+    
+    // Check if saved IDs are stale (not in discovered list)
+    const discoveredIds = new Set(discoveredCameras.map(c => c.id));
+    const staleIds = selectedIds.filter(id => !discoveredIds.has(id) && discoveredCameras.length > 0);
+    const hasStaleIds = staleIds.length > 0 && discoveredCameras.length > 0;
 
     const toggleCamera = (cameraId: string, checked: boolean, cameraName?: string) => {
       const current = savedCameraIds(configRef.current);
@@ -275,6 +287,17 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
 
     return (
       <div className="space-y-3">
+        {/* Warn if cameraLabels exist but cameraIds is empty or has stale IDs */}
+        {cameraLabels && Object.keys(cameraLabels).length > 0 && selectedIds.length === 0 && (
+          <div className="rounded-lg border border-error/50 bg-error/10 px-3 py-2 text-sm text-error">
+            Saved cameras are invalid or not found on server. Use Discover and re-select cameras.
+          </div>
+        )}
+        {hasStaleIds && (
+          <div className="rounded-lg border border-error/50 bg-error/10 px-3 py-2 text-sm text-error">
+            Some saved cameras ({staleIds.join(', ')}) are no longer available on the server. Please re-select cameras.
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="App">
             <select

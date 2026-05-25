@@ -1,3 +1,4 @@
+import copy
 import logging
 import re
 import uuid
@@ -18,6 +19,7 @@ from .db import get_db, init_db
 from .log_config import configure_logging
 from .ip_filter import IPWhitelistMiddleware, validate_ip_or_cidr
 from .models import ExecutionRun, Profile, ScheduledAction
+from .notification_parse import normalize_evalex_config, reconcile_evalex_config
 from .schemas import (
     ActionCreate,
     ActionOut,
@@ -65,6 +67,13 @@ def _ensure_notification_id(config: dict) -> dict:
     if not cfg.get("id"):
         cfg["id"] = str(uuid.uuid4())
     return cfg
+
+
+async def _prepare_evalex_config_on_copy(config: dict) -> dict:
+    """Deep-copy, normalize, and best-effort reconcile Evalex notification config."""
+    normalized = normalize_evalex_config(copy.deepcopy(config or {}))
+    reconciled, _ = await reconcile_evalex_config(normalized)
+    return reconciled
 
 
 @asynccontextmanager
@@ -211,7 +220,7 @@ def delete_profile(profile_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/profiles/{profile_id}/copy", response_model=ProfileOut)
-def copy_profile(profile_id: str, body: ProfileUpdate, db: Session = Depends(get_db)):
+async def copy_profile(profile_id: str, body: ProfileUpdate, db: Session = Depends(get_db)):
     source = db.get(Profile, profile_id)
     if not source:
         raise HTTPException(404, "Profile not found")
@@ -229,6 +238,10 @@ def copy_profile(profile_id: str, body: ProfileUpdate, db: Session = Depends(get
     db.flush()
     
     for action in source.actions:
+        notif_config = copy.deepcopy(action.notification_config) or {}
+        if action.channel == "evalex":
+            notif_config = await _prepare_evalex_config_on_copy(notif_config)
+        
         new_action = ScheduledAction(
             profile_id=new_profile.id,
             label=action.label,
@@ -236,7 +249,7 @@ def copy_profile(profile_id: str, body: ProfileUpdate, db: Session = Depends(get
             time=action.time,
             channel=action.channel,
             enabled=action.enabled,
-            notification_config=dict(action.notification_config),
+            notification_config=notif_config,
         )
         db.add(new_action)
     
@@ -267,6 +280,12 @@ def create_action(profile_id: str, body: ActionCreate, db: Session = Depends(get
         raise HTTPException(404, "Profile not found")
     _validate_time(body.time)
     ch = _validate_channel(body.channel)
+    
+    notif_config = _ensure_notification_id(body.notification_config)
+    # Normalize evalex configs on create
+    if ch == "evalex":
+        notif_config = normalize_evalex_config(notif_config)
+    
     a = ScheduledAction(
         profile_id=profile_id,
         label=body.label,
@@ -274,7 +293,7 @@ def create_action(profile_id: str, body: ActionCreate, db: Session = Depends(get
         time=body.time.strip(),
         channel=ch,
         enabled=body.enabled,
-        notification_config=_ensure_notification_id(body.notification_config),
+        notification_config=notif_config,
     )
     db.add(a)
     db.commit()
@@ -302,7 +321,12 @@ def update_action(action_id: str, body: ActionUpdate, db: Session = Depends(get_
     if "channel" in data:
         data["channel"] = _validate_channel(data["channel"])
     if "notification_config" in data:
-        data["notification_config"] = _ensure_notification_id(data["notification_config"])
+        notif_config = _ensure_notification_id(data["notification_config"])
+        # Normalize evalex configs on update
+        channel = data.get("channel") or a.channel
+        if channel == "evalex":
+            notif_config = normalize_evalex_config(notif_config)
+        data["notification_config"] = notif_config
     for field, val in data.items():
         setattr(a, field, val)
     db.commit()
@@ -321,10 +345,14 @@ def delete_action(action_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/api/actions/{action_id}/copy")
-def copy_action(action_id: str, db: Session = Depends(get_db)):
+async def copy_action(action_id: str, db: Session = Depends(get_db)):
     a = db.get(ScheduledAction, action_id)
     if not a:
         raise HTTPException(404, "Action not found")
+    
+    notif_config = copy.deepcopy(a.notification_config) or {}
+    if a.channel == "evalex":
+        notif_config = await _prepare_evalex_config_on_copy(notif_config)
     
     new_action = ScheduledAction(
         profile_id=a.profile_id,
@@ -333,7 +361,7 @@ def copy_action(action_id: str, db: Session = Depends(get_db)):
         time=a.time,
         channel=a.channel,
         enabled=a.enabled,
-        notification_config=a.notification_config,
+        notification_config=notif_config,
     )
     db.add(new_action)
     db.commit()
