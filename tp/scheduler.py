@@ -28,22 +28,34 @@ def set_scheduler_loop(loop: asyncio.AbstractEventLoop) -> None:
     _app_loop = loop
 
 
+def _normalized_slot_time(scheduled_for: datetime) -> datetime:
+    return scheduled_for.astimezone(timezone.utc).replace(second=0, microsecond=0)
+
+
 def _slot_key(action_id: str, scheduled_for: datetime) -> tuple[str, datetime]:
-    sf = scheduled_for.astimezone(timezone.utc).replace(second=0, microsecond=0)
-    return (action_id, sf)
+    return (action_id, _normalized_slot_time(scheduled_for))
 
 
-def has_execution_for_slot(db: Session, action_id: str, scheduled_for: datetime) -> bool:
-    sf = scheduled_for.astimezone(timezone.utc).replace(second=0, microsecond=0)
+def _slot_identity(action: ScheduledAction, scheduled_for: datetime) -> tuple[str, datetime]:
+    return _slot_key(action.id, scheduled_for)
+
+
+def _get_execution_for_slot(
+    db: Session, action_id: str, scheduled_for: datetime,
+) -> ExecutionRun | None:
+    sf = _normalized_slot_time(scheduled_for)
     return (
-        db.query(ExecutionRun.id)
+        db.query(ExecutionRun)
         .filter(
             ExecutionRun.scheduled_action_id == action_id,
             ExecutionRun.scheduled_for == sf,
         )
         .first()
-        is not None
     )
+
+
+def has_execution_for_slot(db: Session, action_id: str, scheduled_for: datetime) -> bool:
+    return _get_execution_for_slot(db, action_id, scheduled_for) is not None
 
 
 def collapse_to_latest_missed_per_action(candidates: list[Slot]) -> list[Slot]:
@@ -84,8 +96,8 @@ def find_missed_occurrences(db: Session, now_utc: datetime | None = None) -> lis
         if not has_execution_for_slot(db, slot[0].id, slot[2])
     ]
     to_run = _collapse_to_latest_per_channel(unrun)
-    to_run_keys = {(s[0].id, s[2]) for s in to_run}
-    to_skip = [s for s in unrun if (s[0].id, s[2]) not in to_run_keys]
+    to_run_keys = {_slot_identity(s[0], s[2]) for s in to_run}
+    to_skip = [s for s in unrun if _slot_identity(s[0], s[2]) not in to_run_keys]
     if to_skip:
         _mark_slots_skipped(db, to_skip)
     return to_run
@@ -111,8 +123,37 @@ def find_missed_for_profile_on_activation(
         if slot[2] < until_utc and not has_execution_for_slot(db, slot[0].id, slot[2])
     ]
     to_run = _collapse_to_latest_per_channel(unrun)
-    to_run_keys = {(s[0].id, s[2]) for s in to_run}
-    to_skip = [s for s in unrun if (s[0].id, s[2]) not in to_run_keys]
+    to_run_keys = {_slot_identity(s[0], s[2]) for s in to_run}
+    to_skip = [s for s in unrun if _slot_identity(s[0], s[2]) not in to_run_keys]
+    if to_skip:
+        _mark_slots_skipped(db, to_skip)
+    return to_run
+
+
+def find_latest_per_channel_on_activation(
+    db: Session,
+    profile: Profile,
+    activated_at_utc: datetime,
+) -> list[Slot]:
+    """Return today's latest slot per channel before activation (including already-run)."""
+    tz = profile_timezone(profile.timezone)
+    local_activation = activated_at_utc.astimezone(tz)
+    day_start_local = local_activation.replace(hour=0, minute=0, second=0, microsecond=0)
+    since_utc = day_start_local.astimezone(timezone.utc)
+    until_utc = activated_at_utc.astimezone(timezone.utc)
+
+    candidates = expand_occurrences(
+        db, since_utc, until_utc, profile_id=profile.id,
+        require_enabled_profile=False,
+    )
+    past = [slot for slot in candidates if slot[2] < until_utc]
+    to_run = _collapse_to_latest_per_channel(past)
+    to_run_keys = {_slot_identity(s[0], s[2]) for s in to_run}
+    to_skip = [
+        s for s in past
+        if _slot_identity(s[0], s[2]) not in to_run_keys
+        and not has_execution_for_slot(db, s[0].id, s[2])
+    ]
     if to_skip:
         _mark_slots_skipped(db, to_skip)
     return to_run
@@ -156,10 +197,28 @@ def try_claim_slot(
     action: ScheduledAction,
     profile: Profile,
     scheduled_for: datetime,
+    *,
+    allow_replay: bool = False,
 ) -> str | None:
     """Claim a slot; return ExecutionRun id or None if already claimed."""
-    sf = scheduled_for.astimezone(timezone.utc).replace(second=0, microsecond=0)
-    if has_execution_for_slot(db, action.id, sf):
+    sf = _normalized_slot_time(scheduled_for)
+    existing = _get_execution_for_slot(db, action.id, sf)
+    if existing is not None:
+        if allow_replay and existing.status in ("success", "failed", "skipped"):
+            prior_status = existing.status
+            existing.status = "running"
+            existing.error = None
+            existing.detail = None
+            existing.fired_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(existing)
+            logger.info(
+                "replay slot action_id=%s scheduled_for=%s prior_status=%s",
+                action.id,
+                format_server_local(sf),
+                prior_status,
+            )
+            return existing.id
         logger.debug(
             "skip already ran action_id=%s scheduled_for=%s",
             action.id,
@@ -269,7 +328,9 @@ def _track_task(task: asyncio.Task) -> None:
     task.add_done_callback(_in_flight.discard)
 
 
-def enqueue_slots(slots: list[Slot], *, reason: str = "tick") -> int:
+def enqueue_slots(
+    slots: list[Slot], *, reason: str = "tick", allow_replay: bool = False,
+) -> int:
     """Claim and start background tasks for slots. Returns enqueue count."""
     if not slots:
         return 0
@@ -287,7 +348,9 @@ def enqueue_slots(slots: list[Slot], *, reason: str = "tick") -> int:
                 return 0
 
         for action, profile, scheduled_for in slots:
-            run_id = try_claim_slot(db, action, profile, scheduled_for)
+            run_id = try_claim_slot(
+                db, action, profile, scheduled_for, allow_replay=allow_replay,
+            )
             if not run_id:
                 continue
             sf = scheduled_for.astimezone(timezone.utc).replace(second=0, microsecond=0)
@@ -350,15 +413,21 @@ async def catch_up_missed(now_utc: datetime | None = None) -> None:
 
 
 def schedule_profile_activation_catchup(profile_id: str) -> None:
-    """Enqueue same-day missed slots before activation time."""
+    """Enqueue same-day catch-up slots when a profile is enabled."""
     db = SessionLocal()
     try:
         profile = db.get(Profile, profile_id)
         if not profile or not profile.enabled:
             return
         activated_at = datetime.now(timezone.utc)
-        slots = find_missed_for_profile_on_activation(db, profile, activated_at)
-        enqueued = enqueue_slots(slots, reason="profile-activation")
+        if profile.run_latest_per_channel_on_activation:
+            slots = find_latest_per_channel_on_activation(db, profile, activated_at)
+            enqueued = enqueue_slots(
+                slots, reason="profile-activation", allow_replay=True,
+            )
+        else:
+            slots = find_missed_for_profile_on_activation(db, profile, activated_at)
+            enqueued = enqueue_slots(slots, reason="profile-activation")
         logger.info(
             "profile activation catch-up profile_id=%s name=%r enqueued=%d",
             profile_id,

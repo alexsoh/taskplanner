@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Profile } from '../types.ts';
 
 interface Props {
@@ -25,6 +25,18 @@ export default function ProfileCard({
   onDelete,
 }: Props) {
   const [isTogglingEnabled, setIsTogglingEnabled] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        closeMenu();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isMenuOpen]);
 
   const handleToggleEnabled = async () => {
     setIsTogglingEnabled(true);
@@ -45,7 +57,7 @@ export default function ProfileCard({
         isSelected
           ? 'border-accent bg-accent/10'
           : 'border-border bg-bg-secondary hover:bg-bg-tertiary hover:border-border'
-      } ${!profile.enabled ? 'opacity-60' : ''}`}
+      } ${!profile.enabled ? 'opacity-60' : ''} ${isMenuOpen ? 'z-50' : 'z-0'}`}
     >
       {/* Card content */}
       <div className="space-y-2">
@@ -68,11 +80,17 @@ export default function ProfileCard({
             Disabled
           </div>
         )}
+        {(profile.run_latest_per_channel_on_activation ?? false) && (
+          <div className="text-xs font-medium text-accent bg-accent/10 w-fit px-2 py-1 rounded">
+            Latest on enable
+          </div>
+        )}
       </div>
 
       {/* Menu button */}
       <div
-        className="absolute top-2 right-2 relative"
+        ref={menuRef}
+        className="absolute top-2 right-2"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -88,7 +106,7 @@ export default function ProfileCard({
 
         {/* Dropdown menu */}
         {isMenuOpen && (
-          <div className="absolute top-full left-0 pt-1 w-40 bg-bg-tertiary border border-border rounded-lg shadow-lg z-10">
+          <div className="absolute top-full right-0 pt-1 w-40 bg-bg-tertiary border border-border rounded-lg shadow-lg z-50">
             <button
               type="button"
               onClick={async (e) => {

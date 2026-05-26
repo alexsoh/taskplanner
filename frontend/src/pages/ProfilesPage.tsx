@@ -22,6 +22,7 @@ export default function ProfilesPage({
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [editingRunLatestOnActivation, setEditingRunLatestOnActivation] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string>('');
 
   const add = async () => {
@@ -45,9 +46,13 @@ export default function ProfilesPage({
   const saveEdit = async () => {
     if (!editingName.trim() || !editingId) return;
     try {
-      await api.updateProfile(editingId, { name: editingName.trim() });
+      await api.updateProfile(editingId, {
+        name: editingName.trim(),
+        run_latest_per_channel_on_activation: editingRunLatestOnActivation,
+      });
       setEditingId(null);
       setEditingName('');
+      setEditingRunLatestOnActivation(false);
       onProfilesChange();
     } catch (e) {
       setError(String(e));
@@ -86,6 +91,7 @@ export default function ProfilesPage({
   const startEdit = (p: Profile) => {
     setEditingId(p.id);
     setEditingName(p.name);
+    setEditingRunLatestOnActivation(p.run_latest_per_channel_on_activation ?? false);
     setOpenMenuId('');
   };
 
@@ -157,10 +163,24 @@ export default function ProfilesPage({
             onChange={(e) => setEditingName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') saveEdit();
-              if (e.key === 'Escape') setEditingId(null);
+              if (e.key === 'Escape') {
+                setEditingId(null);
+                setEditingRunLatestOnActivation(false);
+              }
             }}
             autoFocus
           />
+          <label className="flex items-start gap-2 text-sm text-text-secondary cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={editingRunLatestOnActivation}
+              onChange={(e) => setEditingRunLatestOnActivation(e.target.checked)}
+            />
+            <span>
+              On enable, run today&apos;s latest action per channel (even if already ran)
+            </span>
+          </label>
           <div className="flex gap-2">
             <button
               type="button"
@@ -171,7 +191,10 @@ export default function ProfilesPage({
             </button>
             <button
               type="button"
-              onClick={() => setEditingId(null)}
+              onClick={() => {
+                setEditingId(null);
+                setEditingRunLatestOnActivation(false);
+              }}
               className="px-3 py-1.5 border border-border rounded text-sm hover:bg-bg-tertiary transition-colors"
             >
               Cancel
@@ -184,7 +207,7 @@ export default function ProfilesPage({
       {profiles.length === 0 ? (
         <p className="text-sm text-text-muted">No profiles yet. Click "+ Add Profile" to create one.</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 isolate">
           {profiles.map((p) => (
             <ProfileCard
               key={p.id}

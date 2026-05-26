@@ -11,6 +11,7 @@ from tp.scheduler import (
     collect_slots_for_tick,
     enqueue_slots,
     find_due_actions,
+    find_latest_per_channel_on_activation,
     find_missed_for_profile_on_activation,
     find_missed_occurrences,
     has_execution_for_slot,
@@ -342,3 +343,138 @@ def test_concurrent_same_minute_two_actions():
             db.close()
 
     asyncio.run(_run())
+
+
+def test_latest_on_activation_returns_latest_even_if_ran():
+    """With flag on, latest same-day slot is returned even when already executed."""
+    db = SessionLocal()
+    try:
+        p, actions = _seed_profile_with_actions(
+            db,
+            enabled=False,
+            actions=[{"time": "06:00", "days_of_week": [0], "label": "Ran", "channel": "http"}],
+        )
+        p.run_latest_per_channel_on_activation = True
+        action = actions[0]
+        profile = db.get(Profile, action.profile_id)
+        slot_time = datetime(2026, 5, 18, 6, 0, tzinfo=timezone.utc)
+        db.add(
+            ExecutionRun(
+                scheduled_action_id=action.id,
+                profile_id=profile.id,
+                scheduled_for=slot_time,
+                fired_at=datetime(2026, 5, 18, 6, 5, tzinfo=timezone.utc),
+                status="success",
+                channel="http",
+                label="Ran",
+            ),
+        )
+        db.commit()
+        activated_at = datetime(2026, 5, 18, 10, 0, tzinfo=timezone.utc)
+        latest = find_latest_per_channel_on_activation(db, p, activated_at)
+        assert len(latest) == 1
+        assert latest[0][2] == slot_time
+        assert find_missed_for_profile_on_activation(db, p, activated_at) == []
+    finally:
+        db.close()
+
+
+def test_latest_on_activation_two_actions_same_channel():
+    """Flag on: latest per channel; older unrun slot skipped."""
+    db = SessionLocal()
+    try:
+        p, actions = _seed_profile_with_actions(
+            db,
+            enabled=False,
+            actions=[
+                {"time": "00:00", "days_of_week": [0], "label": "Early", "channel": "http"},
+                {"time": "06:00", "days_of_week": [0], "label": "Late", "channel": "http"},
+            ],
+        )
+        p.run_latest_per_channel_on_activation = True
+        db.commit()
+        early_action, late_action = actions
+        activated_at = datetime(2026, 5, 18, 10, 0, tzinfo=timezone.utc)
+        latest = find_latest_per_channel_on_activation(db, p, activated_at)
+        assert len(latest) == 1
+        assert latest[0][2].hour == 6
+        early_slot = datetime(2026, 5, 18, 0, 0, tzinfo=timezone.utc)
+        early_run = db.query(ExecutionRun).filter(
+            ExecutionRun.scheduled_action_id == early_action.id,
+            ExecutionRun.scheduled_for == early_slot,
+        ).one_or_none()
+        assert early_run is not None and early_run.status == "skipped"
+        assert late_action.label == "Late"
+    finally:
+        db.close()
+
+
+def test_try_claim_slot_allow_replay():
+    db = SessionLocal()
+    try:
+        _, actions = _seed_profile_with_actions(
+            db,
+            actions=[{"time": "06:00", "days_of_week": [0]}],
+        )
+        action = actions[0]
+        profile = db.get(Profile, action.profile_id)
+        sf = datetime(2026, 5, 18, 6, 0, tzinfo=timezone.utc)
+        first_id = try_claim_slot(db, action, profile, sf)
+        assert first_id is not None
+        run = db.get(ExecutionRun, first_id)
+        run.status = "success"
+        db.commit()
+        replay_id = try_claim_slot(db, action, profile, sf, allow_replay=True)
+        assert replay_id == first_id
+        db.refresh(run)
+        assert run.status == "running"
+        assert try_claim_slot(db, action, profile, sf, allow_replay=True) is None
+    finally:
+        db.close()
+
+
+def test_try_claim_slot_replay_skips_running():
+    db = SessionLocal()
+    try:
+        _, actions = _seed_profile_with_actions(
+            db,
+            actions=[{"time": "06:00", "days_of_week": [0]}],
+        )
+        action = actions[0]
+        profile = db.get(Profile, action.profile_id)
+        sf = datetime(2026, 5, 18, 6, 0, tzinfo=timezone.utc)
+        run_id = try_claim_slot(db, action, profile, sf)
+        assert run_id is not None
+        assert try_claim_slot(db, action, profile, sf, allow_replay=True) is None
+    finally:
+        db.close()
+
+
+def test_try_claim_slot_allow_replay_skipped():
+    db = SessionLocal()
+    try:
+        _, actions = _seed_profile_with_actions(
+            db,
+            actions=[{"time": "06:00", "days_of_week": [0]}],
+        )
+        action = actions[0]
+        profile = db.get(Profile, action.profile_id)
+        sf = datetime(2026, 5, 18, 6, 0, tzinfo=timezone.utc)
+        db.add(
+            ExecutionRun(
+                scheduled_action_id=action.id,
+                profile_id=profile.id,
+                scheduled_for=sf,
+                fired_at=datetime(2026, 5, 18, 6, 0, tzinfo=timezone.utc),
+                status="skipped",
+                channel="http",
+                label="X",
+            ),
+        )
+        db.commit()
+        replay_id = try_claim_slot(db, action, profile, sf, allow_replay=True)
+        assert replay_id is not None
+        run = db.query(ExecutionRun).filter(ExecutionRun.scheduled_action_id == action.id).one()
+        assert run.status == "running"
+    finally:
+        db.close()

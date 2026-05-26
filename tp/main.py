@@ -193,10 +193,13 @@ def create_profile(body: ProfileCreate, db: Session = Depends(get_db)):
         timezone=body.timezone,
         enabled=body.enabled,
         color=body.color,
+        run_latest_per_channel_on_activation=body.run_latest_per_channel_on_activation,
     )
     db.add(p)
     db.commit()
     db.refresh(p)
+    if body.enabled is True:
+        dispatch_profile_activation_catchup(p.id)
     return p
 
 
@@ -247,6 +250,11 @@ async def copy_profile(profile_id: str, body: ProfileUpdate, db: Session = Depen
         timezone=body.timezone if body.timezone is not None else source.timezone,
         enabled=new_enabled,
         color=body.color if body.color is not None else source.color,
+        run_latest_per_channel_on_activation=(
+            body.run_latest_per_channel_on_activation
+            if body.run_latest_per_channel_on_activation is not None
+            else source.run_latest_per_channel_on_activation
+        ),
     )
     if new_enabled is True:
         db.query(Profile).update({"enabled": False})
@@ -271,6 +279,8 @@ async def copy_profile(profile_id: str, body: ProfileUpdate, db: Session = Depen
     
     db.commit()
     db.refresh(new_profile)
+    if new_enabled is True:
+        dispatch_profile_activation_catchup(new_profile.id)
     return new_profile
 
 

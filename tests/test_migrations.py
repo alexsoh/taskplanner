@@ -7,7 +7,11 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from tp.calendar import expand_calendar
-from tp.migrations import migrate_add_profile_color, migrate_days_of_week_to_array
+from tp.migrations import (
+    migrate_add_profile_color,
+    migrate_add_profile_run_latest_on_activation,
+    migrate_days_of_week_to_array,
+)
 
 
 def test_migrate_add_profile_color_backfills_legacy_db(tmp_path: Path) -> None:
@@ -60,6 +64,7 @@ def test_migrate_add_profile_color_backfills_legacy_db(tmp_path: Path) -> None:
         # Must run migration before expand_calendar to add days_of_week column
         migrate_days_of_week_to_array(db)
         migrate_add_profile_color(db)
+        migrate_add_profile_run_latest_on_activation(db)
         events = expand_calendar(db, date(2026, 5, 18), date(2026, 5, 24))
         assert len(events) == 1
         assert events[0].profile_color == "#38bdf8"

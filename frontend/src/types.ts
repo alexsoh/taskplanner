@@ -126,6 +126,7 @@ export interface Profile {
   timezone: string;
   enabled: boolean;
   color: string;
+  run_latest_per_channel_on_activation: boolean;
   created_at: string;
 }
 

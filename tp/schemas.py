@@ -11,6 +11,7 @@ class ProfileCreate(BaseModel):
     timezone: str = "UTC"
     enabled: bool = False
     color: str = "#38bdf8"
+    run_latest_per_channel_on_activation: bool = False
 
 
 class ProfileUpdate(BaseModel):
@@ -18,6 +19,7 @@ class ProfileUpdate(BaseModel):
     timezone: Optional[str] = None
     enabled: Optional[bool] = None
     color: Optional[str] = None
+    run_latest_per_channel_on_activation: Optional[bool] = None
 
     @field_validator("name")
     @classmethod
@@ -33,6 +35,7 @@ class ProfileOut(BaseModel):
     timezone: str
     enabled: bool
     color: str
+    run_latest_per_channel_on_activation: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}

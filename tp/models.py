@@ -30,6 +30,9 @@ class Profile(Base):
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     color: Mapped[str] = mapped_column(String(16), nullable=False, default="#38bdf8")
+    run_latest_per_channel_on_activation: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     actions = relationship(

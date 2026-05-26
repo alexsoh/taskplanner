@@ -143,6 +143,25 @@ def migrate_add_execution_run_unique_index(db: Session) -> None:
         raise
 
 
+def migrate_add_profile_run_latest_on_activation(db: Session) -> None:
+    """Add run_latest_per_channel_on_activation column to profiles table."""
+    if not _table_exists(db, "profiles"):
+        return
+    if _column_exists(db, "profiles", "run_latest_per_channel_on_activation"):
+        return
+    try:
+        db.execute(text(
+            "ALTER TABLE profiles ADD COLUMN run_latest_per_channel_on_activation "
+            "BOOLEAN NOT NULL DEFAULT 0"
+        ))
+        db.commit()
+        logger.info("migrate_add_profile_run_latest_on_activation completed")
+    except Exception:
+        db.rollback()
+        logger.exception("migrate_add_profile_run_latest_on_activation failed")
+        raise
+
+
 def migrate_ensure_single_active_profile(db: Session) -> None:
     """If multiple profiles are enabled (legacy bug), keep only the oldest active."""
     if not _table_exists(db, "profiles"):

@@ -36,6 +36,7 @@ def run_migrations(db: Session) -> None:
         migrate_add_execution_run_unique_index,
         migrate_add_ip_whitelist_and_port,
         migrate_add_profile_color,
+        migrate_add_profile_run_latest_on_activation,
         migrate_add_upgrade_columns,
         migrate_days_of_week_to_array,
         migrate_drop_day_of_week_column,
@@ -45,6 +46,7 @@ def run_migrations(db: Session) -> None:
     migrate_add_upgrade_columns(db)
     migrate_add_ip_whitelist_and_port(db)
     migrate_add_profile_color(db)
+    migrate_add_profile_run_latest_on_activation(db)
     migrate_days_of_week_to_array(db)
     migrate_drop_day_of_week_column(db)
     migrate_ensure_single_active_profile(db)
