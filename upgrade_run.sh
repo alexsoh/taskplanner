@@ -33,6 +33,23 @@ step()  { echo ""; echo "==> $1"; }
 ok()    { echo "    [OK] $1"; }
 fail()  { echo "    [FAIL] $1" >&2; }
 
+prune_old_backups() {
+  local root="${APP_DIR}/backups"
+  local max=3
+  [ -d "$root" ] || return 0
+  local to_delete
+  to_delete=$(ls -1dt "$root"/*/ 2>/dev/null | tail -n +$((max + 1)) || true)
+  [ -z "$to_delete" ] && return 0
+  local count=0
+  while IFS= read -r d; do
+    if [ -n "$d" ]; then
+      rm -rf "$d"
+      count=$((count + 1))
+    fi
+  done <<< "$to_delete"
+  ok "Pruned $count old backup(s), keeping $max most recent"
+}
+
 TIMESTAMP=$(date +"%Y%m%d_%H%M")
 
 PYTHON="${APP_DIR}/venv/bin/python"
@@ -214,6 +231,9 @@ except Exception as e:
 PYTHON_EOF
 )
 echo "    $SETTINGS_CHECK"
+
+step "Pruning old backups (keeping 3 most recent)..."
+prune_old_backups
 
 echo ""
 echo "=== Upgrade complete! ==="

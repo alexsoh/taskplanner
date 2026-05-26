@@ -32,6 +32,22 @@ function Run-Ext([scriptblock]$sb, [switch]$NoThrow) {
     }
 }
 
+function Prune-OldBackups {
+    param([int]$MaxKeep = 3)
+    $root = Join-Path $AppDir "backups"
+    if (-not (Test-Path $root)) { return }
+    $old = Get-ChildItem -Path $root -Directory |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -Skip $MaxKeep
+    $count = @($old).Count
+    foreach ($dir in $old) {
+        Remove-Item -Path $dir.FullName -Recurse -Force
+    }
+    if ($count -gt 0) {
+        Write-Ok "Pruned $count old backup(s), keeping $MaxKeep most recent"
+    }
+}
+
 $Python = if (Test-Path (Join-Path $AppDir "python\python.exe")) {
     Join-Path $AppDir "python\python.exe"
 } elseif (Test-Path (Join-Path $AppDir "venv\Scripts\python.exe")) {
@@ -160,6 +176,9 @@ try {
     } catch {
         Write-Fail "Service health check failed, but it may still be starting up"
     }
+
+    Write-Step "Pruning old backups (keeping 3 most recent)..."
+    Prune-OldBackups
 
     Write-Host ""
     Write-Host "=== Upgrade completed successfully ===" -ForegroundColor Green
