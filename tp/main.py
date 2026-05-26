@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import logging
 import re
@@ -13,7 +14,14 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from . import APP_DIR
-from .action_runner import ActionRunError, configure_notifiers, run_scheduled_action, start_notifiers, stop_notifiers
+from .action_runner import (
+    ActionRunError,
+    configure_notifiers,
+    run_scheduled_action,
+    set_notifier_event_loop,
+    start_notifiers,
+    stop_notifiers,
+)
 from .calendar import expand_calendar
 from .db import get_db, init_db
 from .log_config import configure_logging
@@ -32,7 +40,7 @@ from .schemas import (
     SettingsOut,
     SettingsUpdate,
 )
-from .scheduler import dispatch_profile_activation_catchup, scheduler_loop
+from .scheduler import dispatch_profile_activation_catchup, scheduler_loop, set_scheduler_loop
 from .tzutil import format_server_local, server_timezone_name
 from .settings_store import (
     load_mqtt_telegram,
@@ -90,8 +98,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     db = SessionLocal()
     try:
         mqtt_s, tg_s = load_mqtt_telegram(db)
+        app_loop = asyncio.get_running_loop()
+        set_notifier_event_loop(app_loop)
+        set_scheduler_loop(app_loop)
         configure_notifiers(mqtt_s, tg_s)
-        
+
         # Initialize IP whitelist middleware
         _ip_middleware = IPWhitelistMiddleware()
         allowed_ips = get_allowed_ips(db)

@@ -29,6 +29,14 @@ _notify_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="taskpla
 
 _mqtt_settings: Optional[MqttSettings] = None
 _telegram_settings: Optional[TelegramSettings] = None
+_notifier_event_loop: Optional[asyncio.AbstractEventLoop] = None
+
+
+def set_notifier_event_loop(loop: asyncio.AbstractEventLoop) -> None:
+    """Store the app event loop for MQTT callbacks (survives configure_notifiers reconnects)."""
+    global _notifier_event_loop
+    _notifier_event_loop = loop
+    mqtt.set_event_loop(loop)
 
 
 def _set_profile_enabled_sync(profile_id: str, enabled: bool) -> None:
@@ -59,6 +67,8 @@ def configure_notifiers(mqtt_settings: MqttSettings, telegram_settings: Telegram
     _mqtt_settings = mqtt_settings
     _telegram_settings = telegram_settings
     mqtt.set_profile_callbacks(_set_profile_enabled_sync)
+    if _notifier_event_loop is not None:
+        mqtt.set_event_loop(_notifier_event_loop)
     if mqtt_settings.enabled:
         mqtt.connect(mqtt_settings)
     else:

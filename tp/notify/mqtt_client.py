@@ -48,6 +48,9 @@ class MqttClient:
         self._profile_listener_topic_prefix = ""
         self._profile_set_enabled: Callable[[str, bool], None] | None = None
 
+    def set_event_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._loop = loop
+
     def set_image_callback(
         self,
         callback: Callable[[str, str], Awaitable[None]],
@@ -218,14 +221,40 @@ class MqttClient:
         if len(parts) != 3 or parts[1] != "cmd":
             logger.debug("Profile listener: ignoring unrecognized topic '%s'", remainder)
             return
-        profile_id, _, action = parts
+        profile_id = parts[0].strip()
+        action = parts[2].strip().lower()
+        if not profile_id:
+            logger.debug("Profile listener: empty profile id in '%s'", remainder)
+            return
         if action not in ("enable", "disable"):
             logger.debug("Profile listener: unknown action '%s'", action)
             return
         enabled = action == "enable"
-        if self._profile_set_enabled and self._loop:
+        logger.debug(
+            "Profile listener: received %s for profile %s",
+            action,
+            profile_id,
+        )
+        if not self._profile_set_enabled:
+            logger.warning("Profile listener: no handler registered")
+            return
+        if not self._loop:
+            logger.warning(
+                "Profile listener: event loop not set; cannot %s profile %s",
+                action,
+                profile_id,
+            )
+            return
+        try:
             self._loop.call_soon_threadsafe(self._profile_set_enabled, profile_id, enabled)
-            logger.info("Profile listener: %s profile %s", action, profile_id)
+        except RuntimeError:
+            logger.warning(
+                "Profile listener: event loop not running; cannot %s profile %s",
+                action,
+                profile_id,
+            )
+            return
+        logger.info("Profile listener: %s profile %s", action, profile_id)
 
     def _handle_command_message(self, remainder: str, payload: bytes) -> None:
         """Parse and execute a command topic: <camera_id>/cmd/<action>."""
