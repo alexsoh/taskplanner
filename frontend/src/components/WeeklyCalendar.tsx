@@ -1,5 +1,5 @@
 import type { CalendarEvent } from '../types.ts';
-import { CHANNEL_COLORS, DAY_NAMES } from '../utils/notifications.ts';
+import { CHANNEL_COLORS, channelLabel, DAY_NAMES } from '../utils/notifications.ts';
 
 type Props = {
   events: CalendarEvent[];
@@ -51,10 +51,10 @@ export default function WeeklyCalendar({ events, weekStart, timezoneLabel }: Pro
                   key={`${ev.action_id}-${ev.occurrence_utc}`}
                   className="text-xs px-1.5 py-1 rounded border border-border/60 truncate"
                   style={{ borderLeftColor: ev.profile_color, borderLeftWidth: 3 }}
-                  title={`${ev.label} (${ev.channel})`}
+                  title={`${ev.label} (${channelLabel(ev.channel)})`}
                 >
                   <span className="font-mono text-text-muted">{ev.time}</span>{' '}
-                  <span style={{ color: CHANNEL_COLORS[ev.channel] ?? '#94a3b8' }}>{ev.channel}</span>
+                  <span style={{ color: CHANNEL_COLORS[ev.channel] ?? '#94a3b8' }}>{channelLabel(ev.channel)}</span>
                   <div className="truncate text-text-primary">{ev.label}</div>
                 </div>
               ))

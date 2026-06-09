@@ -41,6 +41,7 @@ def run_migrations(db: Session) -> None:
         migrate_days_of_week_to_array,
         migrate_drop_day_of_week_column,
         migrate_ensure_single_active_profile,
+        migrate_rename_evalex_channel,
     )
 
     migrate_add_upgrade_columns(db)
@@ -51,6 +52,7 @@ def run_migrations(db: Session) -> None:
     migrate_drop_day_of_week_column(db)
     migrate_ensure_single_active_profile(db)
     migrate_add_execution_run_unique_index(db)
+    migrate_rename_evalex_channel(db)
 
 
 def ensure_migrations(db: Session) -> None:

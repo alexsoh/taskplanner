@@ -183,6 +183,25 @@ def migrate_ensure_single_active_profile(db: Session) -> None:
     )
 
 
+def migrate_rename_evalex_channel(db: Session) -> None:
+    """Rename evalex notification channel to evalex-camera."""
+    try:
+        if _table_exists(db, "scheduled_actions"):
+            db.execute(text(
+                "UPDATE scheduled_actions SET channel = 'evalex-camera' WHERE channel = 'evalex'"
+            ))
+        if _table_exists(db, "execution_runs"):
+            db.execute(text(
+                "UPDATE execution_runs SET channel = 'evalex-camera' WHERE channel = 'evalex'"
+            ))
+        db.commit()
+        logger.info("migrate_rename_evalex_channel completed")
+    except Exception:
+        db.rollback()
+        logger.exception("migrate_rename_evalex_channel failed")
+        raise
+
+
 def migrate_drop_day_of_week_column(db: Session) -> None:
     """Drop the old day_of_week column now that days_of_week JSON array is in use.
 

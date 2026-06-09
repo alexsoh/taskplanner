@@ -11,7 +11,8 @@ from .. import APP_DIR
 
 __all__ = [
     "APP_DIR",
-    "EvalexNotification",
+    "EvalexBackupNotification",
+    "EvalexCameraNotification",
     "FolderConfig",
     "HttpHeaderEntry",
     "HttpNotification",
@@ -144,7 +145,7 @@ class NvrNotification:
 
 
 @dataclass
-class EvalexNotification:
+class EvalexCameraNotification:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
     enabled: bool = True
@@ -152,6 +153,16 @@ class EvalexNotification:
     serverAddress: str = ""
     cameraIds: list = field(default_factory=list)
     action: Literal["enable", "disable"] = "enable"
+
+
+@dataclass
+class EvalexBackupNotification:
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = ""
+    enabled: bool = True
+    app: Literal["vizmux", "piyoai", "vizrec"] = "vizmux"
+    serverAddress: str = ""
+    retentionDays: int = 7
 
 
 @dataclass

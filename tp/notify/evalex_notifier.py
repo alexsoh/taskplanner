@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 import httpx
 
-from .settings_types import EvalexNotification
+from .settings_types import EvalexCameraNotification
 
 logger = logging.getLogger("taskplanner.notify.evalex")
 
@@ -16,14 +16,14 @@ TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
 
 
 async def send_notification(
-    notif: EvalexNotification,
+    notif: EvalexCameraNotification,
     context: Any,
     logger_: logging.Logger = logger,
 ) -> dict[str, Any]:
     """Send camera enable/disable command to a remote app (VizMux, PiyoAI, or VizRec).
 
     Args:
-        notif: EvalexNotification with app, serverAddress, cameraIds, and action
+        notif: EvalexCameraNotification with app, serverAddress, cameraIds, and action
         context: Dummy context (not used for Evalex)
         logger_: Logger instance
 

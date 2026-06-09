@@ -1,6 +1,6 @@
 export type PayloadType = 'json' | 'image' | 'both';
 export type MessageMode = 'raw' | 'template' | 'simple';
-export type NotificationChannel = 'mqtt' | 'telegram' | 'http' | 'script' | 'nvr' | 'evalex';
+export type NotificationChannel = 'mqtt' | 'telegram' | 'http' | 'script' | 'nvr' | 'evalex-camera' | 'evalex-backup';
 
 export interface MqttSettings {
   broker: string;
@@ -100,7 +100,7 @@ export interface NvrNotification {
 export type EvalexApp = 'vizmux' | 'piyoai' | 'vizrec';
 export type EvalexAction = 'enable' | 'disable';
 
-export interface EvalexNotification {
+export interface EvalexCameraNotification {
   id: string;
   name: string;
   enabled: boolean;
@@ -109,6 +109,15 @@ export interface EvalexNotification {
   cameraIds: string[];
   cameraLabels?: Record<string, string>;
   action: EvalexAction;
+}
+
+export interface EvalexBackupNotification {
+  id: string;
+  name: string;
+  enabled: boolean;
+  app: EvalexApp;
+  serverAddress: string;
+  retentionDays: number;
 }
 
 export interface TelegramSettings {

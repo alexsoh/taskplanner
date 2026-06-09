@@ -62,7 +62,7 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
   const [camerasExpanded, setCamerasExpanded] = useState(false);
 
   const handleDiscover = useCallback(async (expandOnSuccess = false) => {
-    if (channel !== 'evalex') return;
+    if (channel !== 'evalex-camera') return;
     const app = String(configRef.current.app ?? 'vizmux');
     let serverAddress = String(configRef.current.serverAddress ?? '').trim();
 
@@ -97,30 +97,30 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
     }
   }, [channel]);
 
-  // Reset evalex discovery state when switching away from the evalex channel
+  // Reset evalex discovery state when switching away from the evalex-camera channel
   useEffect(() => {
-    if (channel !== 'evalex') {
+    if (channel !== 'evalex-camera') {
       setDiscoveredCameras([]);
       setCamerasExpanded(false);
       setDiscoveryError(null);
     }
   }, [channel]);
 
-  // Auto-discover once when opening evalex form with serverAddress
+  // Auto-discover once when opening evalex-camera form with serverAddress
   useEffect(() => {
-    if (channel !== 'evalex') return;
+    if (channel !== 'evalex-camera') return;
     if (!String(config.serverAddress ?? '').trim()) return;
     void handleDiscover(false);
   }, [channel, config.serverAddress, handleDiscover]);
 
   // Memoize selected IDs so the label-sync effect dep is stable across renders
   const evalexSelectedIds = useMemo(
-    () => (channel === 'evalex' ? savedCameraIds(config) : []),
+    () => (channel === 'evalex-camera' ? savedCameraIds(config) : []),
     [channel, config],
   );
 
   useEffect(() => {
-    if (channel !== 'evalex') return;
+    if (channel !== 'evalex-camera') return;
     if (discoveredCameras.length === 0 || evalexSelectedIds.length === 0) return;
     const labels = savedCameraLabels(configRef.current);
     let changed = false;
@@ -140,7 +140,7 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
 
   const discoveredNames = useMemo(() => {
     const names = new Map<string, string>();
-    if (channel !== 'evalex') return names;
+    if (channel !== 'evalex-camera') return names;
     for (const cam of discoveredCameras) {
       if (cam.id) names.set(cam.id, cam.name || cam.id);
     }
@@ -252,7 +252,7 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
     );
   }
 
-  if (channel === 'evalex') {
+  if (channel === 'evalex-camera') {
     const selectedIds = evalexSelectedIds;
     const cameraLabels = savedCameraLabels(config);
     const labelForCamera = (id: string) => cameraLabels[id] || discoveredNames.get(id) || id;
@@ -405,6 +405,43 @@ export default function NotificationForm({ channel, config, onChange }: Props) {
               <span className="text-sm">Disable</span>
             </label>
           </div>
+        </Field>
+      </div>
+    );
+  }
+
+  if (channel === 'evalex-backup') {
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="App">
+            <select
+              className={inputCls}
+              value={String(config.app ?? 'vizmux')}
+              onChange={(e) => set('app', e.target.value)}
+            >
+              <option value="vizmux">VizMux</option>
+              <option value="piyoai">PiyoAI</option>
+              <option value="vizrec">VizRec</option>
+            </select>
+          </Field>
+          <Field label="Server Address">
+            <input
+              className={inputCls}
+              placeholder="http://localhost:8000"
+              value={String(config.serverAddress ?? '')}
+              onChange={(e) => set('serverAddress', e.target.value)}
+            />
+          </Field>
+        </div>
+        <Field label="Retention Days">
+          <input
+            type="number"
+            min={1}
+            className={inputCls}
+            value={Number(config.retentionDays ?? 7)}
+            onChange={(e) => set('retentionDays', Math.max(1, parseInt(e.target.value, 10) || 7))}
+          />
         </Field>
       </div>
     );

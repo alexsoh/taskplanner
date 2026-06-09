@@ -27,7 +27,11 @@ from .db import get_db, init_db
 from .log_config import configure_logging
 from .ip_filter import IPWhitelistMiddleware, validate_ip_or_cidr
 from .models import ExecutionRun, Profile, ScheduledAction
-from .notification_parse import normalize_evalex_config, reconcile_evalex_config
+from .notification_parse import (
+    normalize_evalex_backup_config,
+    normalize_evalex_camera_config,
+    reconcile_evalex_camera_config,
+)
 from .schemas import (
     ActionCreate,
     ActionOut,
@@ -57,7 +61,7 @@ logger = logging.getLogger("taskplanner.main")
 _scheduler_task = None
 _ip_middleware: Optional[IPWhitelistMiddleware] = None
 _TIME_RE = re.compile(r"^\d{2}:\d{2}$")
-_CHANNELS = frozenset({"mqtt", "telegram", "http", "script", "nvr", "evalex"})
+_CHANNELS = frozenset({"mqtt", "telegram", "http", "script", "nvr", "evalex-camera", "evalex-backup"})
 
 
 def _validate_time(t: str) -> None:
@@ -79,10 +83,10 @@ def _ensure_notification_id(config: dict) -> dict:
     return cfg
 
 
-async def _prepare_evalex_config_on_copy(config: dict) -> dict:
-    """Deep-copy, normalize, and best-effort reconcile Evalex notification config."""
-    normalized = normalize_evalex_config(copy.deepcopy(config or {}))
-    reconciled, _ = await reconcile_evalex_config(normalized)
+async def _prepare_evalex_camera_config_on_copy(config: dict) -> dict:
+    """Deep-copy, normalize, and best-effort reconcile Evalex camera notification config."""
+    normalized = normalize_evalex_camera_config(copy.deepcopy(config or {}))
+    reconciled, _ = await reconcile_evalex_camera_config(normalized)
     return reconciled
 
 
@@ -274,8 +278,10 @@ async def copy_profile(profile_id: str, body: ProfileUpdate, db: Session = Depen
     
     for action in source.actions:
         notif_config = copy.deepcopy(action.notification_config) or {}
-        if action.channel == "evalex":
-            notif_config = await _prepare_evalex_config_on_copy(notif_config)
+        if action.channel == "evalex-camera":
+            notif_config = await _prepare_evalex_camera_config_on_copy(notif_config)
+        elif action.channel == "evalex-backup":
+            notif_config = normalize_evalex_backup_config(notif_config)
         
         new_action = ScheduledAction(
             profile_id=new_profile.id,
@@ -319,9 +325,10 @@ def create_action(profile_id: str, body: ActionCreate, db: Session = Depends(get
     ch = _validate_channel(body.channel)
     
     notif_config = _ensure_notification_id(body.notification_config)
-    # Normalize evalex configs on create
-    if ch == "evalex":
-        notif_config = normalize_evalex_config(notif_config)
+    if ch == "evalex-camera":
+        notif_config = normalize_evalex_camera_config(notif_config)
+    elif ch == "evalex-backup":
+        notif_config = normalize_evalex_backup_config(notif_config)
     
     a = ScheduledAction(
         profile_id=profile_id,
@@ -359,10 +366,11 @@ def update_action(action_id: str, body: ActionUpdate, db: Session = Depends(get_
         data["channel"] = _validate_channel(data["channel"])
     if "notification_config" in data:
         notif_config = _ensure_notification_id(data["notification_config"])
-        # Normalize evalex configs on update
         channel = data.get("channel") or a.channel
-        if channel == "evalex":
-            notif_config = normalize_evalex_config(notif_config)
+        if channel == "evalex-camera":
+            notif_config = normalize_evalex_camera_config(notif_config)
+        elif channel == "evalex-backup":
+            notif_config = normalize_evalex_backup_config(notif_config)
         data["notification_config"] = notif_config
     for field, val in data.items():
         setattr(a, field, val)
@@ -388,8 +396,10 @@ async def copy_action(action_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "Action not found")
     
     notif_config = copy.deepcopy(a.notification_config) or {}
-    if a.channel == "evalex":
-        notif_config = await _prepare_evalex_config_on_copy(notif_config)
+    if a.channel == "evalex-camera":
+        notif_config = await _prepare_evalex_camera_config_on_copy(notif_config)
+    elif a.channel == "evalex-backup":
+        notif_config = normalize_evalex_backup_config(notif_config)
     
     new_action = ScheduledAction(
         profile_id=a.profile_id,

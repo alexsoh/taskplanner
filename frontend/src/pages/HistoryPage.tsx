@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import * as api from '../api/client.ts';
 import type { ExecutionRun, Profile } from '../types.ts';
-import { CHANNEL_COLORS } from '../utils/notifications.ts';
+import { CHANNEL_COLORS, channelLabel } from '../utils/notifications.ts';
 
 type Props = {
   profiles: Profile[];
@@ -90,7 +90,7 @@ export default function HistoryPage({ profiles, selectedId, onSelectProfile }: P
                 fired {r.fired_at_local || r.fired_at}
               </span>
               <span>{profileName(r.profile_id)}</span>
-              <span style={{ color: CHANNEL_COLORS[r.channel] ?? undefined }}>{r.channel}</span>
+              <span style={{ color: CHANNEL_COLORS[r.channel] ?? undefined }}>{channelLabel(r.channel)}</span>
               <span className="flex-1 min-w-0 truncate">{r.label}</span>
               {r.error && <span className="w-full text-error text-xs">{r.error}</span>}
             </li>

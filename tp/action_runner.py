@@ -9,7 +9,8 @@ from typing import Any, Optional
 
 from .models import Profile, ScheduledAction
 from .notification_parse import parse_notification
-from .notify.evalex_notifier import send_notification as send_evalex_notification
+from .notify.evalex_backup_notifier import send_notification as send_evalex_backup_notification
+from .notify.evalex_notifier import send_notification as send_evalex_camera_notification
 from .notify.http_notifier import HttpNotifier
 from .notify.mqtt_client import MqttClient
 from .notify.nvr_notifier import NvrNotifier
@@ -173,16 +174,26 @@ async def run_scheduled_action(
                 source_for_templates,
             ),
         )
-    elif channel == "evalex":
+    elif channel == "evalex-camera":
         if not (getattr(test_notif, "serverAddress", "") or "").strip():
-            raise ActionRunError("Evalex server address is empty")
+            raise ActionRunError("Evalex camera server address is empty")
         if not getattr(test_notif, "cameraIds", []):
             raise ActionRunError("Evalex camera IDs list is empty")
-        result_dict = await send_evalex_notification(test_notif, result, logger)
+        result_dict = await send_evalex_camera_notification(test_notif, result, logger)
         if result_dict.get("status") == "error":
-            # Surface top-level error if set, otherwise use first error from list
-            error_msg = result_dict.get("error") or (result_dict.get("errors") or ["Evalex failed"])[0]
-            raise ActionRunError(f"Evalex error: {error_msg}", detail=result_dict)
+            error_msg = result_dict.get("error") or (result_dict.get("errors") or ["Evalex camera failed"])[0]
+            raise ActionRunError(f"Evalex camera error: {error_msg}", detail=result_dict)
+        return result_dict
+    elif channel == "evalex-backup":
+        if not (getattr(test_notif, "serverAddress", "") or "").strip():
+            raise ActionRunError("Evalex backup server address is empty")
+        retention_days = int(getattr(test_notif, "retentionDays", 7) or 7)
+        if retention_days < 1:
+            raise ActionRunError("Evalex backup retentionDays must be >= 1")
+        result_dict = await send_evalex_backup_notification(test_notif, result, logger)
+        if result_dict.get("status") == "error":
+            error_msg = result_dict.get("error") or "Evalex backup failed"
+            raise ActionRunError(f"Evalex backup error: {error_msg}", detail=result_dict)
         return result_dict
     else:
         raise ActionRunError(f"Unknown channel: {channel}")

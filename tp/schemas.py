@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-Channel = Literal["mqtt", "telegram", "http", "script", "nvr", "evalex"]
+Channel = Literal["mqtt", "telegram", "http", "script", "nvr", "evalex-camera", "evalex-backup"]
 
 
 class ProfileCreate(BaseModel):

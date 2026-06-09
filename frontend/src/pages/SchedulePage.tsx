@@ -3,7 +3,7 @@ import * as api from '../api/client.ts';
 import NotificationForm from '../components/NotificationForm.tsx';
 import WeeklyCalendar from '../components/WeeklyCalendar.tsx';
 import type { AppSettings, CalendarEvent, NotificationChannel, Profile, ScheduledAction } from '../types.ts';
-import { CHANNEL_COLORS, DAY_NAMES, defaultNotificationForChannel } from '../utils/notifications.ts';
+import { CHANNEL_COLORS, CHANNEL_LABELS, channelLabel, DAY_NAMES, defaultNotificationForChannel } from '../utils/notifications.ts';
 import { browserTimezone, formatProfileTimezone } from '../utils/timezone.ts';
 
 type Props = {
@@ -218,7 +218,7 @@ export default function SchedulePage({
       <WeeklyCalendar events={events} weekStart={weekStart} timezoneLabel={profileTimezoneLabel} />
 
       <div className="flex flex-wrap gap-2">
-        {(['evalex', 'mqtt', 'telegram', 'http', 'script', 'nvr'] as NotificationChannel[]).map((ch) => (
+        {(['evalex-camera', 'evalex-backup', 'mqtt', 'telegram', 'http', 'script', 'nvr'] as NotificationChannel[]).map((ch) => (
           <button
             key={ch}
             type="button"
@@ -226,7 +226,7 @@ export default function SchedulePage({
             style={{ color: CHANNEL_COLORS[ch] }}
             onClick={() => startNew(ch)}
           >
-            + {ch}
+            + {CHANNEL_LABELS[ch] ?? ch}
           </button>
         ))}
       </div>
@@ -293,7 +293,7 @@ export default function SchedulePage({
             </label>
             <label className="text-sm space-y-1">
               Channel
-              <span className="block px-2 py-1.5 text-sm capitalize">{draft.channel}</span>
+              <span className="block px-2 py-1.5 text-sm">{channelLabel(draft.channel)}</span>
             </label>
           </div>
           <NotificationForm
@@ -356,7 +356,7 @@ export default function SchedulePage({
                 <span className="font-mono text-text-muted w-24">
                   {a.days_of_week.map(d => DAY_NAMES[d]).join(', ')} {a.time}
                 </span>
-                <span style={{ color: CHANNEL_COLORS[a.channel] }}>{a.channel}</span>
+                <span style={{ color: CHANNEL_COLORS[a.channel] }}>{channelLabel(a.channel)}</span>
                 <span className="flex-1 truncate">{a.label}</span>
                 {!a.enabled && <span className="text-xs text-text-muted">off</span>}
                 <button

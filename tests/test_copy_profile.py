@@ -5,10 +5,10 @@ import asyncio
 import pytest
 from tp.db import SessionLocal
 from tp.models import Profile, ScheduledAction
-from tp.notification_parse import normalize_evalex_config, reconcile_evalex_config
+from tp.notification_parse import normalize_evalex_camera_config, reconcile_evalex_camera_config
 
 
-def test_normalize_evalex_config_list_camera_ids():
+def test_normalize_evalex_camera_config_list_camera_ids():
     """Test that cameraIds list is preserved and normalized."""
     config = {
         "app": "vizmux",
@@ -16,12 +16,12 @@ def test_normalize_evalex_config_list_camera_ids():
         "cameraIds": ["cam-1", " cam-2 ", ""],
         "action": "enable",
     }
-    normalized = normalize_evalex_config(config)
+    normalized = normalize_evalex_camera_config(config)
     assert normalized["cameraIds"] == ["cam-1", "cam-2"]
     assert normalized["id"] is not None  # Should have an id
 
 
-def test_normalize_evalex_config_string_camera_id():
+def test_normalize_evalex_camera_config_string_camera_id():
     """Test that single string cameraIds is converted to list."""
     config = {
         "app": "vizmux",
@@ -29,22 +29,22 @@ def test_normalize_evalex_config_string_camera_id():
         "cameraIds": "cam-1",
         "action": "enable",
     }
-    normalized = normalize_evalex_config(config)
+    normalized = normalize_evalex_camera_config(config)
     assert normalized["cameraIds"] == ["cam-1"]
 
 
-def test_normalize_evalex_config_missing_camera_ids():
+def test_normalize_evalex_camera_config_missing_camera_ids():
     """Test that missing cameraIds becomes empty list."""
     config = {
         "app": "vizmux",
         "serverAddress": "http://localhost:8000",
         "action": "enable",
     }
-    normalized = normalize_evalex_config(config)
+    normalized = normalize_evalex_camera_config(config)
     assert normalized["cameraIds"] == []
 
 
-def test_normalize_evalex_config_prunes_camera_labels():
+def test_normalize_evalex_camera_config_prunes_camera_labels():
     """Test that cameraLabels is pruned to only keys in cameraIds."""
     config = {
         "app": "vizmux",
@@ -53,11 +53,11 @@ def test_normalize_evalex_config_prunes_camera_labels():
         "cameraLabels": {"cam-1": "Camera 1", "cam-3": "Camera 3"},
         "action": "enable",
     }
-    normalized = normalize_evalex_config(config)
+    normalized = normalize_evalex_camera_config(config)
     assert normalized["cameraLabels"] == {"cam-1": "Camera 1"}
 
 
-def test_normalize_evalex_config_dict_camera_ids():
+def test_normalize_evalex_camera_config_dict_camera_ids():
     """Test that dict cameraIds uses keys as IDs."""
     config = {
         "app": "vizmux",
@@ -65,11 +65,11 @@ def test_normalize_evalex_config_dict_camera_ids():
         "cameraIds": {"cam-1": "Camera 1", "cam-2": "Camera 2"},
         "action": "enable",
     }
-    normalized = normalize_evalex_config(config)
+    normalized = normalize_evalex_camera_config(config)
     assert normalized["cameraIds"] == ["cam-1", "cam-2"]
 
 
-def test_reconcile_evalex_config_filters_stale_ids():
+def test_reconcile_evalex_camera_config_filters_stale_ids():
     """Test that reconcile filters out IDs not in live settings."""
     async def _run():
         config = {
@@ -80,7 +80,7 @@ def test_reconcile_evalex_config_filters_stale_ids():
         }
         # This will hit an unreachable server, so stale_removed will be empty and unreachable=True
         # We can't actually test the filtering without mocking httpx, but we can verify the structure
-        reconciled, metadata = await reconcile_evalex_config(config)
+        reconciled, metadata = await reconcile_evalex_camera_config(config)
         assert "stale_removed" in metadata
         assert "unreachable" in metadata
 
@@ -101,7 +101,7 @@ def test_copy_profile_deep_copies_notification_config():
             label="Evalex action",
             days_of_week=[0],
             time="09:00",
-            channel="evalex",
+            channel="evalex-camera",
             enabled=True,
             notification_config={
                 "app": "vizmux",
@@ -147,7 +147,7 @@ def test_copy_action_deep_copies_notification_config():
             label="Evalex action",
             days_of_week=[0],
             time="09:00",
-            channel="evalex",
+            channel="evalex-camera",
             enabled=True,
             notification_config={
                 "app": "piyoai",

@@ -68,7 +68,7 @@ def collapse_to_latest_missed_per_action(candidates: list[Slot]) -> list[Slot]:
 
 
 def _collapse_to_latest_per_channel(candidates: list[Slot]) -> list[Slot]:
-    """Return the latest missed slot per channel (e.g. evalex, mqtt, telegram)."""
+    """Return the latest missed slot per channel (e.g. evalex-camera, mqtt, telegram)."""
     best: dict[str, Slot] = {}
     for action, profile, scheduled_for in candidates:
         channel = action.channel
