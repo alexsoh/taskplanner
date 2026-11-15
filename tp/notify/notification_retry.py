@@ -25,6 +25,43 @@ class RetryOutcome(str, Enum):
     ABORT = "abort"
 
 
+async def retry_http_response(
+    operation_id: str,
+    call: Callable[[], Awaitable[httpx.Response]],
+) -> tuple[bool, httpx.Response | None]:
+    """Run an HTTP call with the standard notification retry policy.
+
+    Returns ``(ok, last_response)``. ``ok`` is True only after a successful response.
+    Transport errors and retryable statuses (408, 429, 5xx) are retried. Other HTTP
+    statuses abort immediately.
+    """
+    captured: dict[str, httpx.Response] = {}
+
+    async def run_once() -> RetryOutcome:
+        response = await call()
+        captured["response"] = response
+        if response.is_success:
+            return RetryOutcome.OK
+        if http_status_should_retry(response.status_code):
+            logger.warning(
+                "[%s] retryable HTTP %s: %s",
+                operation_id,
+                response.status_code,
+                (response.text or "")[:200],
+            )
+            return RetryOutcome.RETRY
+        logger.warning(
+            "[%s] non-retryable HTTP %s: %s",
+            operation_id,
+            response.status_code,
+            (response.text or "")[:200],
+        )
+        return RetryOutcome.ABORT
+
+    ok = await retry_async(operation_id, run_once)
+    return ok, captured.get("response")
+
+
 async def retry_async(
     operation_id: str,
     run_once: Callable[[], Awaitable[RetryOutcome]],

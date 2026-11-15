@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 
+from .notification_retry import retry_http_response
 from .settings_types import EvalexBackupNotification
 
 logger = logging.getLogger("taskplanner.notify.evalex_backup")
@@ -27,10 +28,8 @@ async def send_notification(
         logger_: Logger instance
 
     Returns:
-        dict with status and backup details from the remote app
-
-    Raises:
-        httpx.RequestError or httpx.HTTPStatusError on network/HTTP errors
+        dict with status and backup details from the remote app. Transient HTTP
+        and transport failures are retried before the call is reported as failed.
     """
     if not notif.enabled:
         logger_.debug("Evalex backup notification disabled, skipping")
@@ -59,17 +58,18 @@ async def send_notification(
 
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            response = await client.post(url, params={"retain": retention_days})
-            response.raise_for_status()
+            ok, response = await retry_http_response(
+                f"evalex-backup {app}",
+                lambda: client.post(url, params={"retain": retention_days}),
+            )
+            if not ok or response is None:
+                if response is not None:
+                    error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                else:
+                    error_msg = f"Request failed after retries (URL: {url})"
+                logger_.warning(f"Evalex backup: HTTP error for {app}: {error_msg}")
+                return {"status": "error", "error": error_msg, "app": app}
             resp_data = response.json()
-    except httpx.HTTPStatusError as e:
-        error_msg = f"HTTP {e.response.status_code}: {e.response.text[:200]}"
-        logger_.warning(f"Evalex backup: HTTP error for {app}: {error_msg}")
-        return {"status": "error", "error": error_msg, "app": app}
-    except (httpx.RequestError, httpx.TimeoutException) as e:
-        error_msg = f"Request failed: {type(e).__name__}: {str(e) or repr(e)} (URL: {url})"
-        logger_.warning(f"Evalex backup: request error for {app}: {error_msg}")
-        return {"status": "error", "error": error_msg, "app": app}
     except Exception as e:
         error_msg = f"Unexpected error: {str(e)}"
         logger_.exception(f"Evalex backup: unexpected error for {app}")

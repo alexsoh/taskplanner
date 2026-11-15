@@ -8,6 +8,7 @@ from urllib.parse import quote
 
 import httpx
 
+from .notification_retry import retry_http_response
 from .settings_types import EvalexCameraNotification
 
 logger = logging.getLogger("taskplanner.notify.evalex")
@@ -28,10 +29,8 @@ async def send_notification(
         logger_: Logger instance
 
     Returns:
-        dict with status, results, and any errors
-
-    Raises:
-        httpx.RequestError or httpx.HTTPStatusError on network/HTTP errors
+        dict with status, results, and any errors. Transient HTTP and transport
+        failures are retried per camera before the camera is reported as failed.
     """
     if not notif.enabled:
         logger_.debug("Evalex notification disabled, skipping")
@@ -71,14 +70,25 @@ async def send_notification(
             if not camera_id:
                 continue
 
-            try:
-                # URL-encode camera_id to prevent injection/corruption
-                encoded_id = quote(camera_id, safe="")
-                url = f"{server_address}/api/cameras/{encoded_id}/enabled"
-                logger_.debug(f"Calling {url} with enabled={enabled_value}")
+            # URL-encode camera_id to prevent injection/corruption
+            encoded_id = quote(camera_id, safe="")
+            url = f"{server_address}/api/cameras/{encoded_id}/enabled"
+            logger_.debug(f"Calling {url} with enabled={enabled_value}")
 
-                response = await client.post(url, json={"enabled": enabled_value})
-                response.raise_for_status()
+            try:
+                ok, response = await retry_http_response(
+                    f"evalex-camera {app} {camera_id}",
+                    lambda url=url: client.post(url, json={"enabled": enabled_value}),
+                )
+                if not ok or response is None:
+                    if response is not None:
+                        error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                    else:
+                        error_msg = f"Request failed after retries (URL: {url})"
+                    results["cameras"][camera_id] = {"status": "error", "error": error_msg}
+                    errors.append(f"{camera_id}: {error_msg}")
+                    logger_.warning(f"Evalex: HTTP error for {camera_id}: {error_msg}")
+                    continue
 
                 resp_data = response.json()
                 results["cameras"][camera_id] = {
@@ -89,20 +99,6 @@ async def send_notification(
                 logger_.info(
                     f"Evalex: {camera_id} on {app} ({action}ed) - changed={resp_data.get('changed', False)}"
                 )
-
-            except httpx.HTTPStatusError as e:
-                error_msg = f"HTTP {e.status_code}: {e.response.text[:200]}"
-                results["cameras"][camera_id] = {"status": "error", "error": error_msg}
-                errors.append(f"{camera_id}: {error_msg}")
-                logger_.warning(f"Evalex: HTTP error for {camera_id}: {error_msg}")
-
-            except (httpx.RequestError, httpx.TimeoutException) as e:
-                # Provide richer error info with URL and exception type
-                error_msg = f"Request failed: {type(e).__name__}: {str(e) or repr(e)} (URL: {url})"
-                results["cameras"][camera_id] = {"status": "error", "error": error_msg}
-                errors.append(f"{camera_id}: {error_msg}")
-                logger_.warning(f"Evalex: Request error for {camera_id}: {error_msg}")
-
             except Exception as e:
                 error_msg = f"Unexpected error: {str(e)}"
                 results["cameras"][camera_id] = {"status": "error", "error": error_msg}
